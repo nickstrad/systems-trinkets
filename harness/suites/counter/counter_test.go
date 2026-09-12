@@ -9,12 +9,20 @@ import (
 	"testing"
 
 	"systems-trinkets/harness/check"
+	sut "systems-trinkets/harness/example-sut/counter"
 	"systems-trinkets/harness/harness"
 	"systems-trinkets/harness/load"
 	"systems-trinkets/harness/results"
 )
 
-func TestMain(m *testing.M) { os.Exit(harness.Main(m)) }
+// TestMain runs against the configured target, or in-process against the
+// reference memory counter when there is none (so `go test ./...` runs the
+// suite rather than skipping it).
+func TestMain(m *testing.M) {
+	os.Exit(harness.Main(m, harness.InProcess(func() http.Handler {
+		return sut.NewHandler(sut.NewMemory())
+	})))
+}
 
 type counter struct {
 	Name  string `json:"name"`

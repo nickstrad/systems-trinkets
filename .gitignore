@@ -38,6 +38,6 @@ go.work.sum
 /trinkets
 /systems-trinkets
 
-# harness: run results (parquet) and the built CLI
+# harness: run results (parquet) and built binaries (go build -o bin/… ./cmd/harness)
 /harness/results/runs/
-/harness/harness
+/harness/bin/

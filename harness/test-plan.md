@@ -37,7 +37,11 @@ the §10a table, and knows exactly where things stand.
 | 2026-09-12 | Plan v3: phases dropped for a flat backlog (§7). Q9 agreed: counter reference fully done on memory/SQLite/Valkey/PostgreSQL as the worked example. Q10 suggested (`impls/<lang>/<pattern>/`). Q5 revised: `cmd` targets in scope. §10a R0–R5 written. |
 | 2026-09-12 | §0 log and §10c protocol added: owners per R-item (main: R1, R4; builder-opus: R2; builder-sonnet: R3, R5), reviewer (Opus high, read-only) before every commit, one commit per item, §0 entry at every step. Role files created under `.claude/agents/` (uncommitted, land with R0). Codex mapping recorded in §10c: main → `astra` (controlling agent), Sonnet roles → `luna` high, Opus roles → `sol`. **Next: R0** — waiting on the user's go. |
 | 2026-09-12 | Global skill `plan-agent-flow-state` created (~/.agents/skills, symlinked for Claude) generalising §0 + §10a/§10c; rule added: every owner cell names both Claude Code and Codex models so items resume on either platform after a quota limit. §10a cells updated. **Next: R0** — waiting on the user's go. |
-| 2026-09-12 | User set this file as the session goal (`/goal`) — taken as the go. R0 started → main. `go mod tidy` (toml, duckdb-go now direct), `CONTRACT.md` example `page:home` → `page.home`, `go build/vet/test ./...` green. Committed as the R0 commit (sha in `git log`). **Next: R1.** |
+| 2026-09-12 | User set this file as the session goal (`/goal`) — taken as the go. R0 started → main. `go mod tidy` (toml, duckdb-go now direct), `CONTRACT.md` example `page:home` → `page.home`, `go build/vet/test ./...` green. Committed `ba222eb`. **Next: R1.** |
+| 2026-09-12 | R1 started → main. Files: `example-sut/counter/{counter,memory,bugs,storetest}.go` + tests, `example-sut/cmd/counter/main.go`, `harness/main.go` (Option/InProcess), `suites/counter/counter_test.go` (TestMain), `cmd/harness/templates/suite_test.go.tmpl`. `StoreTest` written here (memory + decorators use it) so R2 only adds engine callers. |
+| 2026-09-12 | R1 built by main; done-when verified (in-process suite runs, `-race` green; `--bug lost-update` fails INV-01/02/05, `drop-reset` INV-04, `write-behind` passes 01–05). §9 updated (InProcess built, StoreTest, healthz 503, store error 500). R1 → reviewer dispatched. Gotcha: a stale `counter` on :18080 from the earlier session made every bug mode look identical — check `lsof -iTCP:<port>` before trusting a `--url` run. |
+| 2026-09-12 | R1 review: needs fixes — must-fix: root `.gitignore` line `/harness/harness` (from R0) ignored the *package* dir `harness/harness/`, so `ba222eb` is unbuildable from a clean checkout; now `/harness/bin/`, verified with a `git archive` export build. Should: stale `./example-sut/counter` paths in README/AGENTS/target file; unit test for InProcess results paths (`harness/main_test.go`). Nits: sync.Once on WriteBehind.Close, store closed on bad `--bug`, Getwd error. Sent back for re-check. Infra: Docker Desktop started, `infra/valkey` + `infra/postgres` compose up (for R2). |
+| 2026-09-12 | R1 reviewed clean, nits only (1 must-fix + 3 should + 3 nits fixed; declined: StoreTest in package counter, `--dsn` ignored for memory, INV-06 forward ref) → committed (sha in `git log`, subject "R1: …"). R5 note from reviewer: `knowledge/harness.md:32` still describes `example-sut/counter` as a server. **Next: R2 ∥ R3.** |
 
 ## 1. Goal
 
@@ -378,7 +382,7 @@ func Metric(h *harness.H, name string, value float64, unit string, labels map[st
 // harness — glue used from tests.
 package harness
 func Main(m *testing.M, opts ...Option) int   // TargetFromEnv; start SUT if Target.Cmd (R3); wait /healthz; open sink under HARNESS_RESULTS or <module>/results/runs/<run_id>; run; stop SUT; close sink (also on SIGINT/panic). No target → tests skip, unless InProcess is given.
-func InProcess(newHandler func() http.Handler) Option   // planned R1: no env target → serve newHandler() on httptest, target = {pattern: cwd name, language: go, engine: memory, label: in-process}; results go to HARNESS_RESULTS if set, else results.Discard (in-process runs are not history). Crash tests skip (no Cmd).
+func InProcess(newHandler func() http.Handler) Option   // built R1: no env target → serve newHandler() on httptest, target = {pattern: cwd name, language: go, engine: memory, label: in-process}; results go to HARNESS_RESULTS if set, else results.Discard (in-process runs are not history). Crash tests skip (no Cmd — enforced by H.Restartable once R3 lands).
 func New(t *testing.T) *H     // resets SUT via POST /_reset, checks /healthz (phase "setup"), t.Cleanup records TestRow + Flush
 type H struct{ T *testing.T; Client *hx.Client; Target Target; Ctx context.Context }   // run/test identity lives on Client (Rec, RunID, Test)
 func (h *H) Get/Post/Delete(...)          // ★ hx wrappers using h.Ctx
@@ -402,7 +406,7 @@ func (p *Proc) Kill() error               // SIGKILL the process group, reap
 func (p *Proc) Stop(grace time.Duration) error   // SIGTERM, wait up to grace, then Kill
 func (p *Proc) Exited() <-chan struct{}   // closed when the process is gone (lets Main notice a SUT that died on its own)
 
-// example-sut/counter — the reference counter as a library. Planned R1/R2.
+// example-sut/counter — the reference counter as a library. Built R1 (memory + bugs + handler); engines R2.
 package counter
 type Store interface {
     Incr(ctx, name string, delta int64) (int64, error)   // atomic post-increment value; the primitive under test
@@ -413,13 +417,14 @@ type Store interface {
     Ping(ctx) error                                       // /healthz
     Close() error
 }
-func NewHandler(s Store) http.Handler      // the contract: routes, name regexp, delta parsing, /healthz → Ping, /_reset → Reset
+func NewHandler(s Store) http.Handler      // the contract: routes, name regexp, delta parsing, /healthz → Ping (503 {"ok":false} on error), /_reset → Reset; any store error → 500 {"error"} and a log line (never 2xx before the store returned)
 func NewMemory() Store
+func StoreTest(t *testing.T, open func() Store)   // ★ conformance test every engine runs (R2 callers): sequential semantics, Incr atomic under 32×200 callers, isolation; wipes and closes the store
 // bugs are Store decorators, one per invariant they break:
 func LostUpdate(Store) Store               // Incr = Get, yield, Set(old+delta)      → INV-01/02/05
 func DropReset(Store) Store                // Reset is a no-op                        → INV-04
-func WriteBehind(Store, flush time.Duration) Store   // Incr updates an in-memory shadow and responds; a goroutine flushes shadow → Set every `flush`. Consistent unless killed → only INV-06 fails
-func Slow(Store, d time.Duration) Store    // every op sleeps d                       → nothing until [expect] exists
+func WriteBehind(Store, flush time.Duration) Store   // Incr updates an in-memory shadow and responds; a goroutine flushes shadow → Set every `flush`. Reads come from the shadow, Del/Reset write through, Close flushes. Consistent unless killed → only INV-06 fails
+func Slow(Store, d time.Duration) Store    // every op (incl. Ping) sleeps d          → nothing until [expect] exists
 // engines, each its own package so cmd is the only importer:
 //   store/sqlite.Open(dsn)   modernc.org/sqlite (same driver as the notes CLI; pure Go); WAL, busy_timeout; INSERT … ON CONFLICT DO UPDATE SET value = value + excluded.value RETURNING value
 //   store/valkey.Open(dsn)   github.com/valkey-io/valkey-go; INCRBY / GET / DEL / FLUSHDB on the DB index in the DSN
@@ -432,9 +437,12 @@ func Slow(Store, d time.Duration) Store    // every op sleeps d                 
 counter --addr 127.0.0.1:8080 --engine memory|sqlite|valkey|postgres [--dsn …] [--bug none|lost-update|drop-reset|write-behind|slow]
 ```
 
-`--dsn` defaults: sqlite → a temp file; valkey → `redis://127.0.0.1:6379/1`;
+`--dsn` defaults (R2): sqlite → a temp file; valkey → `redis://127.0.0.1:6379/1`;
 postgres → the `infra/postgres.compose.yml` credentials. The binary composes
-`NewHandler(bug(engine))`; there is no engine-specific bug code.
+`NewHandler(bug(engine))`; there is no engine-specific bug code. As built
+(R1): `openStore(engine, dsn)` has only `memory`; the other three names are
+a clear "not implemented yet (R2)" error. Bug parameters are fixed in the
+binary: `write-behind` flushes every 1 s, `slow` sleeps 20 ms.
 
 `cmd/harness`:
 

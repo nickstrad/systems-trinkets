@@ -36,7 +36,7 @@ harness/
       counter_test.go
     fifo-queue/ ...       (planned)
   targets/
-    counter-example-memory.toml   (points at example-sut/counter)
+    counter-example-memory.toml   (points at example-sut/cmd/counter)
   infra/
     valkey.compose.yml    postgres.compose.yml
   queries/                *.sql report templates run with DuckDB
@@ -58,7 +58,7 @@ harness/
 Start a reference SUT, then run its suite:
 
 ```
-go run ./example-sut/counter --addr 127.0.0.1:8080 &          # reference SUT
+go run ./example-sut/cmd/counter --addr 127.0.0.1:8080 &      # reference SUT (--engine memory)
 go run ./cmd/harness run counter --url http://127.0.0.1:8080  # runs suites/counter via go test, writes results/runs/<run_id>/*.parquet
 go run ./cmd/harness report --run last
 go run ./cmd/harness sql "select test, status from tests order by 1"
@@ -74,7 +74,7 @@ HARNESS_TARGET=targets/counter-example-memory.toml go test ./suites/counter/ -v
 ```
 
 Without `HARNESS_URL`/`HARNESS_TARGET` a suite skips, so `go test ./...`
-stays green. The reference SUT takes `--bug lost-update|drop-reset|slow` to
+stays green. The reference SUT takes `--bug lost-update|drop-reset|write-behind|slow` to
 prove the suite catches broken implementations.
 
 ## Targets

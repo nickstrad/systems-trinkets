@@ -12,7 +12,9 @@ import (
 	"systems-trinkets/harness/load"
 )
 
-// TestMain opens the results sink for the run and closes it at exit.
+// TestMain opens the results sink for the run and closes it at exit. Once a
+// Go reference implementation exists, pass harness.InProcess(func() http.Handler
+// { … }) so `go test ./...` runs this suite against it instead of skipping.
 func TestMain(m *testing.M) { os.Exit(harness.Main(m)) }
 
 // TestContract walks the sequential contract (kind 1). harness.New has already

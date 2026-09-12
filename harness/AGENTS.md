@@ -69,7 +69,7 @@ anything that records); note the API in test-plan.md §9.
 
 ```
 go test ./...                                   # unit tests; suites skip without a target
-go run ./example-sut/counter --addr 127.0.0.1:8080 [--bug lost-update|drop-reset|slow]
+go run ./example-sut/cmd/counter --addr 127.0.0.1:8080 [--engine memory] [--bug lost-update|drop-reset|write-behind|slow]
 go run ./cmd/harness run counter --url http://127.0.0.1:8080 [--language go --engine memory --label "…"]
 go run ./cmd/harness report --run last [--query summary|latency|checks|compare|history]
 go run ./cmd/harness sql "select … from samples"
