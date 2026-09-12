@@ -37,3 +37,7 @@ go.work.sum
 *.db-shm
 /trinkets
 /systems-trinkets
+
+# harness: run results (parquet) and the built CLI
+/harness/results/runs/
+/harness/harness

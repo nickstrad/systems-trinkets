@@ -1,19 +1,43 @@
 # HTTP invariant harness — test plan
 
-Status: **v1 (2026-09-12) — decisions Q1–Q6 agreed, Q7 deferred; ready to build Phase 1 per §10.** This file is the single source of truth
-for the harness design. It is written so that a fresh session with no context
-can pick up from here. Keep it current: when a decision changes, change it here
-first.
+Status: **v3 (2026-09-12) — toolkit core built and verified (§7 "built"); the
+remaining work is one flat backlog (§7, breakdown in §10), no phases. Next:
+§10 items R0–R5 — the complete Go counter reference on every engine, SUT
+lifecycle, and the first crash test. Current position: see the last entry of
+§0.** This file is the single source of truth for the harness design **and
+the living log of the work**: it is the context that survives a context
+clear. It is written so that a fresh session with no context can pick up
+from here. Keep it current: when a decision changes, change it here first;
+when work starts, is delegated, is reviewed, or lands, append to §0.
 
-Companion docs (to be created once this plan is agreed):
+Companion docs:
 
 - `harness/AGENTS.md` — how an agent works in this folder: the interview used
   to elicit invariants for a new pattern, how to scaffold a suite, how to run
-  and report. Section 8 below is its draft.
+  and report. Derived from §8 (written 2026-09-12).
+- `harness/README.md` — how to run; points here.
 - `harness/suites/<pattern>/CONTRACT.md` and `INVARIANTS.md` — per pattern,
-  agreed with the user before any test code is written.
+  agreed with the user before any test code is written. `counter`: agreed
+  2026-09-12 (user added `DELETE /counters/{name}`; kept INV-COUNTER-01..05,
+  dropped the two "should" invariants for now).
 
 ---
+
+## 0. Work log
+
+Append-only, newest last, one or two lines per entry. The rules are in
+§10c ("Working protocol"). A fresh session reads the last few entries, then
+the §10a table, and knows exactly where things stand.
+
+| When | Entry |
+|------|-------|
+| 2026-09-12 | Plan v1 written; Q1–Q6 agreed, Q7 deferred, Q8 Go. |
+| 2026-09-12 | Toolkit core built (§10b A–H) and verified against `example-sut/counter --bug none\|lost-update\|drop-reset` (details end of §10). Left **uncommitted**. |
+| 2026-09-12 | Plan v2: §9 as-built APIs, §10 breakdown ticked. |
+| 2026-09-12 | Plan v3: phases dropped for a flat backlog (§7). Q9 agreed: counter reference fully done on memory/SQLite/Valkey/PostgreSQL as the worked example. Q10 suggested (`impls/<lang>/<pattern>/`). Q5 revised: `cmd` targets in scope. §10a R0–R5 written. |
+| 2026-09-12 | §0 log and §10c protocol added: owners per R-item (main: R1, R4; builder-opus: R2; builder-sonnet: R3, R5), reviewer (Opus high, read-only) before every commit, one commit per item, §0 entry at every step. Role files created under `.claude/agents/` (uncommitted, land with R0). Codex mapping recorded in §10c: main → `astra` (controlling agent), Sonnet roles → `luna` high, Opus roles → `sol`. **Next: R0** — waiting on the user's go. |
+| 2026-09-12 | Global skill `plan-agent-flow-state` created (~/.agents/skills, symlinked for Claude) generalising §0 + §10a/§10c; rule added: every owner cell names both Claude Code and Codex models so items resume on either platform after a quota limit. §10a cells updated. **Next: R0** — waiting on the user's go. |
+| 2026-09-12 | User set this file as the session goal (`/goal`) — taken as the go. R0 started → main. `go mod tidy` (toml, duckdb-go now direct), `CONTRACT.md` example `page:home` → `page.home`, `go build/vet/test ./...` green. Committed as the R0 commit (sha in `git log`). **Next: R1.** |
 
 ## 1. Goal
 
@@ -42,10 +66,12 @@ application convention) let it through.
 | Q2 | Runner: `go test` or a custom binary? | `go test`. Each suite is a Go test package; a shared results sink is opened in `TestMain` and flushed at exit. Keeps `-run`, `-count`, `-race`, `-timeout`, `-v` for free and the user practices idiomatic Go testing. A thin `harness` CLI wraps `go test` for convenience but is not required. | **agreed** |
 | Q3 | Results pipeline: DuckDB Go bindings (cgo) vs JSONL + `duckdb` CLI vs pure-Go Parquet writer | **`github.com/duckdb/duckdb-go/v2` for both write and read.** The Appender into an in-memory DuckDB *is* the in-memory sink; `COPY … TO parquet` *is* the flush; the report tool reads the same files with the same driver. One dependency, no CLI install, no second Parquet implementation. Verified on this machine: cold build 4.7 s, incremental 0.06 s, ~49–60 MB binary, 200k rows appended in 44 ms. Needs only clang (present) and `CGO_ENABLED=1` (present). Details §6. **Escape hatch:** if cgo turns out to be painful in practice, swap the writer for `parquet-go` (§6 option C) — row structs are kept flat so this stays a small change. | **agreed (try it)** |
 | Q4 | Every server under test must expose `GET /healthz` and `POST /_reset`? | Yes. Two tiny endpoints keep the harness free of per-engine reset code and make every implementation language-agnostic to the harness. `/_reset` wipes the pattern's state (FLUSHALL / TRUNCATE / delete file) — it is a test hook, documented as such in each `CONTRACT.md`. | **agreed (try it)** |
-| Q5 | Who starts the server under test and its backing store? | Phase 1: **the user starts the server** (and Valkey/Postgres if used) and the harness only needs its URL, from the target file or `--url`. Phase 2: an optional `cmd` in the target file lets the harness start/kill/restart the server itself, which crash tests require. Backing stores stay manual (a `docker compose` file per engine is provided under `harness/infra/`). | **agreed** |
+| Q5 | Who starts the server under test and its backing store? | Either. With only `url` in the target file (or `--url`) **the user starts the server** and the harness just talks to it. With `cmd` (+ `cwd`, `env`) the harness starts, kills, restarts and stops it itself (`sut` package, §9) — crash tests need this and skip without it. Backing stores stay manual (a `docker compose` file per engine under `harness/infra/`). | **agreed (cmd part: R3 in §10)** |
 | Q6 | Where does it live? | `harness/` at the repo root as its **own Go module** (`systems-trinkets/harness`), so the `trinkets` notes CLI does not inherit test/parquet dependencies. `harness/results/` is gitignored. Also add the built `systems-trinkets` binary to the root `.gitignore`. | **agreed** |
-| Q7 | Tie runs back to the `trinkets` notes CLI? | **Deferred to the end of Phase 3.** The notes CLI is changing; revisit once both sides settle. | deferred |
+| Q7 | Tie runs back to the `trinkets` notes CLI? | **Deferred.** The notes CLI is changing; revisit once both sides settle. | deferred |
 | Q8 | Harness language | Go. | agreed |
+| Q9 | How complete is the reference counter? | **Fully done: the Go counter on memory, SQLite, Valkey and PostgreSQL, in `example-sut/counter/`.** Counter is simple enough that finishing it on every engine costs little, and it is the *worked example* of the whole loop — contract → suite → implementation per engine → target files → runs → reports — that later patterns and other languages start from. It is not a yardstick; it is the starting point that shows the harness used in a meaningful way. It doubles as the harness's own test fixture (bug modes per invariant, in-process mode for `go test ./...`). (2026-09-12) | **agreed** |
+| Q10 | Where do the user's other implementations live? | Anywhere; a target file only needs `url` (and `cmd`/`cwd` if the harness should start it). Suggested: `impls/<language>/<pattern>/` at the repo root, each its own module, so neither Go module inherits their dependencies. The Go counter reference stays inside the harness module because the suite imports it for in-process runs. | suggested |
 
 **Terminology:** "SUT" = *server under test* — the little HTTP server you write for a pattern (in any language, on any engine). The harness never links to it; it only sends it HTTP requests.
 
@@ -66,9 +92,9 @@ Every suite is expected to grow through these kinds, roughly in order.
 
 1. **Contract / sequential** — one client, deterministic sequences. Does the API do what `CONTRACT.md` says? (Cheap, catches most bugs first.)
 2. **Concurrency invariants** — N goroutines, released together on a barrier, hammering the SUT; then invariants are checked on the **final state** and on the **recorded history**, never on timing. Examples: final counter == number of `2xx` increments; every job id appears in exactly one worker's claimed set; at no instant do two holders believe they own the same lease (checked from request/response intervals); rate limiter admitted ≤ N in any window (checked from admitted timestamps).
-3. **Crash / recovery** (phase 2) — harness kills the SUT (SIGKILL) mid-workload, restarts it, and re-checks invariants: no double-delivery after restart, leases expire, in-flight claims are recoverable, idempotency keys still bind to the same result.
+3. **Crash / recovery** — harness kills the SUT (SIGKILL) mid-workload, restarts it, and re-checks invariants: no double-delivery after restart, leases expire, in-flight claims are recoverable, idempotency keys still bind to the same result. Needs a target with `cmd` (Q5); skips otherwise. Note what a process kill can and cannot probe: the backing store (a separate process, or the OS page cache for SQLite) survives it, so a kill tests the **SUT's** discipline — respond only after commit, one atomic step per request — not the store's durability. Requests in flight at the kill are ambiguous (applied or not), so crash invariants are stated as bounds: `2xx-before-kill ≤ final ≤ 2xx-before-kill + errored`.
 4. **Performance** (recorded, not asserted by default) — throughput and latency percentiles under closed-loop and open-loop load. Stored as metrics and compared across runs in DuckDB. Optional per-target `expect` thresholds make them hard failures when wanted.
-5. **History checks** (phase 3) — record `(invoke, response)` histories for KV/counter/queue ops and run a linearizability checker (Porcupine) when the pattern claims that level of guarantee.
+5. **History checks** (backlog, only if a pattern needs it) — record `(invoke, response)` histories for KV/counter/queue ops and run a linearizability checker (Porcupine) when the pattern claims that level of guarantee.
 
 Principle: a failing **invariant** test must mean the SUT is wrong, not that the harness was unlucky. Performance is reported; correctness is asserted.
 
@@ -87,8 +113,8 @@ harness/
   check/                  invariant assertions -> check rows + t.Errorf
   results/                Run/Test/Check/Sample/Metric row types, in-memory
                           Sink, flush to Parquet, run_id, results dir layout
-  sut/                    (phase 2) start / health-wait / kill / restart / reset
-  history/                (phase 3) op history recording for Porcupine
+  sut/                    (R3) start / kill / stop a SUT process from a
+                          target's cmd; harness.Main and H.Restart use it
   suites/
     counter/
       CONTRACT.md
@@ -96,15 +122,25 @@ harness/
       counter_test.go
     fifo-queue/ ...
   targets/
-    counter-go-valkey.toml
+    counter-go-memory.toml  counter-go-sqlite.toml
+    counter-go-valkey.toml  counter-go-postgres.toml   (R2; all with cmd)
   infra/
     valkey.compose.yml  postgres.compose.yml
   queries/                *.sql report templates run with DuckDB
-  example-sut/            tiny Go reference server(s) for the harness's own
-                          tests, with --bug flags that break invariants on
-                          purpose so we can prove the tests have teeth
+  example-sut/            the reference implementations (Q9): the worked
+    counter/              example of a pattern done end to end. Package
+      counter.go            counter: Store interface, NewHandler, contract
+      memory.go             handler, memory store, bug decorators
+      bugs.go
+      store/sqlite/         one package per engine (only cmd imports them,
+      store/valkey/         so in-process suite runs link only memory)
+      store/postgres/
+    cmd/counter/            binary: --addr --engine --dsn --bug
   results/                gitignored; results/runs/<run_id>/*.parquet
 ```
+
+`history/` (Porcupine) is not in the layout; it is added only when a pattern
+needs it (§7 backlog).
 
 ### Suite skeleton
 
@@ -136,11 +172,12 @@ language = "go"
 engine   = "valkey"
 url      = "http://127.0.0.1:8080"
 label    = "v1 INCR"            # free text, shows up in reports
-# phase 2:
-# cmd = ["go", "run", "./cmd/counter"]
-# cwd = "../impls/go/counter"
-# env = { VALKEY_URL = "redis://127.0.0.1:6379" }
-[expect]                       # optional hard performance limits
+# optional (R3): the harness starts/kills/restarts the SUT itself; crash
+# tests need this and skip without it. cwd is relative to this file.
+cmd = ["go", "run", "./example-sut/cmd/counter", "--engine", "valkey", "--dsn", "redis://127.0.0.1:6379/1"]
+cwd = ".."
+env = { }                       # extra KEY = "VALUE" for the process; PORT is not injected, put --addr in cmd
+[expect]                       # optional hard performance limits (backlog)
 # p99_ms = 20
 ```
 
@@ -157,6 +194,7 @@ label    = "v1 INCR"            # free text, shows up in reports
 | Linearizability | | `anishathalye/porcupine` (`Operation`, `Model`, `CheckOperations`, HTML `Visualize`; used by etcd) for counter/KV/queue histories | |
 | Generated op sequences w/ shrinking | | `pgregory.net/rapid` state-machine testing (generics, shrinking) for adversarial sequences | `leanovate/gopter` (older), `testing.F` (inputs, not sequences) |
 | Jepsen-style framework | hand-roll (that is this harness) | | `maelstrom` (stdin/stdout toy protocol), Jepsen/Elle (Clojure) |
+| Target files (TOML) | `github.com/BurntSushi/toml` (stdlib has no TOML) | | |
 
 Takeaway: day one needs only the stdlib, `x/sync`, and a Parquet path (§6). Everything else is additive and slots into an existing package.
 
@@ -189,7 +227,7 @@ test goroutines ──rows──▶ chan ──▶ collector goroutine ──▶
 ```
 
 - `results.Sink` — `Open(runMeta) (*Sink, error)`, `Test(TestRow)`, `Check(CheckRow)`, `Sample(SampleRow)`, `Metric(MetricRow)`, `Close(ctx) error` (flush + COPY). `harness.Main(m)` opens it, installs a SIGINT handler and a deferred recover so a `^C`-ed or panicking run still exports what it has.
-- Per-test `Flush()` of the appenders (cheap; commits to the in-memory table) so a mid-run `harness report --live` could `ATTACH` later if we ever want it. Not needed in phase 1.
+- Per-test `Flush()` of the appenders (cheap; commits to the in-memory table) so a mid-run `harness report --live` could `ATTACH` later if we ever want it. Not needed yet.
 - Durability option (later, if wanted): open the DuckDB on disk at `results/runs/<run_id>/run.duckdb` instead of in-memory; SIGKILL then loses at most the unflushed rows. Costs nothing but a file. Default stays in-memory per the original ask.
 - Report tool is the same module: `harness report [--run last|<id>] [--query name]`, `harness sql "<sql>"`, and `harness ui` (only if the CLI is installed: `duckdb -ui` opens the local UI; optional).
 
@@ -206,18 +244,40 @@ Requirements:
 |-------|-------|-------------|
 | `runs` | one per run | run_id, started_at, finished_at, pattern, language, engine, label, target_url, harness_git_sha, sut_ref, go_version, host |
 | `tests` | one per Go test (incl. subtests) | run_id, test, status (pass/fail/skip), duration_ns, error |
-| `checks` | one per invariant evaluation | run_id, test, invariant_id, ok, message, details (JSON) |
+| `checks` | one per invariant evaluation | run_id, test, invariant_id, ok, message, details (JSON as VARCHAR), recorded_at |
 | `samples` | one per HTTP request | run_id, test, phase, worker, seq, method, path_template, status, latency_ns, err, started_at |
-| `metrics` | free-form numbers | run_id, test, name, value, unit, labels (JSON) |
+| `metrics` | free-form numbers | run_id, test, name, value, unit, labels (JSON as VARCHAR), recorded_at |
+
+As built (2026-09-12): `at` is a DuckDB keyword, so the timestamp column on
+`checks`/`metrics` is `recorded_at`. JSON columns are stored as `VARCHAR`
+(query with `json_extract`) so the Appender needs no JSON type handling and
+the parquet stays portable. Setup requests made by `harness.New` (`/_reset`,
+`/healthz`) are sampled with `phase = results.PhaseSetup`; `results.Query`
+adds a `samples_measured` view without them, which is what `latency.sql`,
+`compare.sql` and `history.sql` read. Report templates use DuckDB named
+parameters (`$run_id`, `$run_a`, `$run_b`, `$pattern`) bound with
+`sql.Named` — no string substitution. Latency percentiles are computed only
+in SQL; suites record throughput (`check.Metric`) but not their own
+quantiles, so there is one definition of p99.
 
 Canned queries (`queries/`): `summary.sql` (pass/fail per test, latest run), `latency.sql` (p50/p95/p99 per path per run via `quantile_cont`), `checks_failed.sql`, `compare.sql` (two run_ids side by side), `history.sql` (same pattern across all runs, by language × engine).
 
-## 7. Phases
+## 7. Status and backlog
 
-- **Phase 0 (done 2026-09-12)** — this plan; Q1–Q6 agreed, Q7 deferred.
-- **Phase 1 — skeleton with teeth** (breakdown and owners in §10): module, `hx`, `load.Closed` + barrier, `check`, `results` + Parquet flush, `cmd/harness run|report|sql|new-suite`, the `counter` suite, and `example-sut/counter` (in-memory Go server with `--bug lost-update`). Done when: the suite passes against the correct server, fails with a named invariant against the buggy one, and `harness report` shows both runs from Parquet.
-- **Phase 2 — second pattern + crashes**: `fifo-queue` suite (exactly-once claim, ordering, ack/retry), `load.Open`, `sut` lifecycle, first crash test. Done when a kill-mid-claim test passes against a correct SUT.
-- **Phase 3 — depth**: `history` + Porcupine for counter/KV; `compare` reports; `[expect]` thresholds; `trinkets attempt` hand-off; more suites as the user reaches them.
+No phases. One table: what is built, what is next, what waits for the
+pattern that needs it, what was dropped. The next block of work has its
+breakdown in §10.
+
+| Status | Item | Notes |
+|--------|------|-------|
+| built 2026-09-12 | module, `results` sink → Parquet, `hx`, `load.Closed/ClosedFor/Phase`, `check`, `harness` glue, `cmd/harness run\|report\|sql\|new-suite\|targets`, `queries/*.sql`, `infra/` compose files, `counter` CONTRACT/INVARIANTS/suite (INV-01..05), in-memory `example-sut/counter` with `--bug lost-update\|drop-reset\|slow` | Verified: suite passes on the correct server, fails INV-01/02/05 on `lost-update`, INV-04 on `drop-reset`; reports read from Parquet. **Not yet committed** (R0). |
+| **next (§10)** | R0 commit + `go mod tidy` + contract fix · R1 reference counter as a library with in-process suite runs · R2 SQLite/Valkey/PostgreSQL stores + target files · R3 `sut` lifecycle · R4 INV-COUNTER-06 crash test · R5 de-phase every doc | Done when every row of the R-table in §10 is ticked; then the counter is the finished worked example and a new pattern is only "interview → suite → implementations". |
+| when a pattern needs it | `load.Open` (fixed arrival rate) | first needed by `rate-limiter` (#15). Ticker-based, ~60 LOC, or vegeta's `Pacer`. |
+| when wanted | `[expect]` thresholds | post-run SQL in `cmd/harness run` over `samples_measured`, one `checks` row per threshold (`INV-PERF-*`). `--bug slow` then has something to fail. |
+| when there are ≥ 3 targets for one pattern | `harness run --all-targets <pattern>` | runs every `targets/<pattern>-*.toml` in sequence, one run each; `history.sql` already reports across them. |
+| when a pattern claims it | `history/` + Porcupine linearizability check | counter does not need it (INV-02 covers the ordering claim). |
+| deferred (Q7) | `trinkets attempt` hand-off | e.g. `harness run --attempt <id>` appending the run_id to the attempt's lessons. |
+| dropped | toxiproxy, testcontainers, rapid, `fifo-queue` as a toolkit milestone | fifo-queue is just the next pattern; it gets a suite the normal way (§8) when the user reaches it. |
 
 ## 8. Working agreement (draft `AGENTS.md`)
 
@@ -228,13 +288,13 @@ Canned queries (`queries/`): `summary.sql` (pass/fail per test, latest run), `la
    1. What invariant must the system preserve? (list them; each gets an ID)
    2. Which primitive provides each guarantee on this engine? (goes in `INVARIANTS.md`; a failure will point back here)
    3. What happens under concurrent access? (→ which concurrency tests)
-   4. What happens if the process crashes between steps? (→ which crash tests, phase 2)
+   4. What happens if the process crashes between steps? (→ which crash tests; see kind 3 in §4 for what a kill can probe)
    5. How are retries, duplicates, ordering, expiration, recovery handled? (→ contract details: idempotency of endpoints, ack semantics, TTLs)
    6. Which guarantees come from the store vs from application convention? (→ which invariants are "should hold" vs "must hold")
    7. Performance expectations, if any (→ metrics to record, optional `[expect]`)
 3. Propose `CONTRACT.md` (endpoints, request/response JSON, error codes, plus `/healthz` and `/_reset`) and `INVARIANTS.md` (table: ID, statement, guaranteeing primitive, test kind, status). Iterate until agreed.
 4. `harness new-suite <pattern>` scaffolds the package and docs; write tests kind 1 → 2 → 4 → 3.
-5. Run against `example-sut` if one exists, then the user's implementation: `harness run <pattern> --target targets/<file>.toml`.
+5. Implement the reference (or the user's implementation) and run: `harness run <pattern> --target targets/<file>.toml`. Give the reference `--bug` modes that break each invariant and prove the suite catches them.
 6. Report with `harness report --run last`; record lessons with `trinkets attempt add`.
 
 ### Adding a tool to the toolkit
@@ -248,14 +308,15 @@ Add it to the package it belongs to (`hx`, `load`, `check`, `results`, `sut`, `h
 - Every request goes through `hx` so it is sampled.
 - Keep this plan and `AGENTS.md` current; they are the context after a reset.
 
-## 9. Package APIs (Phase 1 contract between packages)
+## 9. Package APIs (as built 2026-09-12; R-items marked "planned")
 
-These signatures are the interface subagents build against. Change them here
-first if they need to change.
+These signatures are the interface between packages. Change them here first
+if they need to change. Deviations from the original draft are marked ★.
 
 ```go
 // results — row types + sink. Flat structs, UTC times, JSON as string fields
-// marshalled by the caller. One collector goroutine owns the DuckDB appenders.
+// marshalled by the caller (results.JSON). One collector goroutine owns the
+// DuckDB appenders.
 package results
 
 type RunRow    struct{ RunID, Pattern, Language, Engine, Label, TargetURL, HarnessSHA, SUTRef, GoVersion, Host string; StartedAt, FinishedAt time.Time }
@@ -264,28 +325,49 @@ type CheckRow  struct{ RunID, Test, InvariantID, Message, DetailsJSON string; OK
 type SampleRow struct{ RunID, Test, Phase, Method, PathTemplate, Err string; Worker, Seq int; Status int; LatencyNS int64; StartedAt time.Time }
 type MetricRow struct{ RunID, Test, Name, Unit, LabelsJSON string; Value float64; At time.Time }
 
-func Open(ctx context.Context, dir string, run RunRow) (*Sink, error) // in-memory DuckDB, creates dir
-func (s *Sink) Test(TestRow); Check(CheckRow); Sample(SampleRow); Metric(MetricRow) // non-blocking, channel-backed
-func (s *Sink) Close(ctx context.Context) error   // drain, finish run row, COPY every table to <dir>/<table>.parquet
-func NewRunID() string                            // sortable: 20260912T151504Z-<4 random chars>
+type Recorder interface{ Test(TestRow); Check(CheckRow); Sample(SampleRow); Metric(MetricRow) } // ★ hx/check/load record through this, never DuckDB
+var  Discard Recorder                              // ★ drops rows
+type Buffer struct{ … }                            // ★ in-memory Recorder for unit tests; Snapshot()
 
-// hx — HTTP client bound to a target and a sink.
+func Open(ctx context.Context, dir string, run RunRow) (*Sink, error) // in-memory DuckDB, creates dir
+func (s *Sink) Test(TestRow); Check(CheckRow); Sample(SampleRow); Metric(MetricRow) // channel-backed; dropped after Close
+func (s *Sink) Flush(ctx) error                   // ★ commit appended rows (harness calls it after every test)
+func (s *Sink) Close(ctx context.Context) error   // drain, write run row, COPY every table to <dir>/<table>.parquet
+func Query(ctx, root string) (*sql.DB, error)     // ★ in-memory DuckDB with a view per table over root/*/<table>.parquet
+func NewRunID() string                            // sortable: 20260912T151504Z-ab3f
+func JSON(v any) string                           // ★ marshal for *JSON fields; nil → "{}"
+func Head[T any](v []T) any                       // ★ truncate a details slice for reports (20 + count)
+const PhaseSetup = "setup"                        // ★ phase of harness.New's reset/healthz samples; Query adds view samples_measured = samples minus it
+var  Tables = []string{"runs","tests","checks","samples","metrics"}
+
+// hx — HTTP client bound to a target and a recorder.
 package hx
-type Client struct{ BaseURL string; HTTP *http.Client; /* sink + run/test identity */ }
+type Client struct{ BaseURL string; HTTP *http.Client; Rec results.Recorder; RunID, Test string }
+func New(baseURL string, rec results.Recorder, runID, test string) *Client
 func (c *Client) Do(ctx, method, pathTemplate string, pathArgs map[string]string, body any, out any, opts ...Opt) (*Resp, error)
-func (c *Client) Get/Post/Delete(...)              // thin wrappers on Do
+func (c *Client) Get(ctx, tmpl, args, out, opts...) / Post(ctx, tmpl, args, body, out, opts...) / Delete(ctx, tmpl, args, opts...)
+func WithTimeout(d) Opt
 type Resp struct{ Status int; Latency time.Duration; Body []byte }
-// Every Do records a SampleRow (worker/phase/seq come from load via context values).
-// Non-2xx is NOT an error by default (tests inspect Status); transport errors are.
+func (r *Resp) OK() bool; func Is2xx(status int) bool   // ★ the one definition of "success" (2xx) used everywhere
+// All clients share one http.Transport with MaxIdleConnsPerHost=512 so workers never redial mid-run.
+// {key} in pathTemplate ← url.PathEscape(pathArgs[key]); body nil|[]byte|JSON; out decoded on 2xx.
+// Every Do records exactly one SampleRow (PathTemplate is the template, so reports group by route).
+// Non-2xx is NOT an error (tests inspect Status); transport errors / timeouts / cancel are.
+// ★ Context labels, set by load and read by Do:
+func WithWorker(ctx, id int) / WorkerFrom(ctx)      // Seq is a per-worker counter kept inside the client
+func WithPhase(ctx, name string) / PhaseFrom(ctx)
+type Counter struct{ Total, OK2xx, Non2xx, Errors atomic.Int64 }   // ★ per-request tallies
+func WithCounter(ctx, *Counter) / CounterFrom(ctx)
 
 // load — concurrency shapes. All start workers behind a barrier.
 package load
-type Worker struct{ ID int; Ctx context.Context; Seq func() int }
-type Result struct{ Total, OK2xx, Non2xx, Errors int; Elapsed time.Duration; Errs []error }
+type Worker struct{ ID int; Ctx context.Context; Iter int }   // Ctx = h.Ctx + WithWorker + WithCounter; ★ Iter = nth fn call (samples.seq counts requests)
+type Result struct{ Total, OK2xx, Non2xx, Errors int; FnErrors int; Errs []error; Elapsed time.Duration } // ★ HTTP tallies from hx.Counter; FnErrors/Errs (≤100) from fn
+func (r Result) Conclusive(h *harness.H) bool   // ★ false (and fails the test) if any request errored: final-state invariants can't be judged
 func Closed(h *harness.H, workers, iterationsPerWorker int, fn func(*Worker) error) Result
 func ClosedFor(h *harness.H, workers int, d time.Duration, fn func(*Worker) error) Result
-func Phase(h *harness.H, name string, fn func())      // labels samples with a phase name
-// phase 2: func Open(h, rate float64, d time.Duration, fn) Result
+func Phase(h *harness.H, name string, fn func())      // swaps h.Ctx for a phase-labelled one for the duration
+// backlog (rate-limiter): func Open(h, rate float64, d time.Duration, fn) Result
 
 // check — invariant assertions. Always record a CheckRow; fail the test if !ok.
 package check
@@ -295,11 +377,64 @@ func Metric(h *harness.H, name string, value float64, unit string, labels map[st
 
 // harness — glue used from tests.
 package harness
-func Main(m *testing.M) int                        // parse target (HARNESS_TARGET file or HARNESS_URL), open sink, run, close sink; handles SIGINT + panic
-func New(t *testing.T) *H                          // resets SUT via POST /_reset, waits /healthz, registers t.Cleanup that records TestRow
-type H struct{ T *testing.T; Client *hx.Client; Target Target; /* run/test identity, sink */ }
-type Target struct{ Pattern, Language, Engine, URL, Label string; Cmd []string; Cwd string; Env map[string]string; Expect map[string]float64 }
+func Main(m *testing.M, opts ...Option) int   // TargetFromEnv; start SUT if Target.Cmd (R3); wait /healthz; open sink under HARNESS_RESULTS or <module>/results/runs/<run_id>; run; stop SUT; close sink (also on SIGINT/panic). No target → tests skip, unless InProcess is given.
+func InProcess(newHandler func() http.Handler) Option   // planned R1: no env target → serve newHandler() on httptest, target = {pattern: cwd name, language: go, engine: memory, label: in-process}; results go to HARNESS_RESULTS if set, else results.Discard (in-process runs are not history). Crash tests skip (no Cmd).
+func New(t *testing.T) *H     // resets SUT via POST /_reset, checks /healthz (phase "setup"), t.Cleanup records TestRow + Flush
+type H struct{ T *testing.T; Client *hx.Client; Target Target; Ctx context.Context }   // run/test identity lives on Client (Rec, RunID, Test)
+func (h *H) Get/Post/Delete(...)          // ★ hx wrappers using h.Ctx
+func (h *H) Must(resp, err) *hx.Resp      // ★ t.Fatal on error or non-2xx (setup steps)
+func (h *H) Fail(msg)                     // ★ t.Error + remembers msg for TestRow.Error (testing.T hides its own)
+func (h *H) Reset()
+func (h *H) Restartable() bool            // planned R3: true when Main started the SUT from Target.Cmd
+func (h *H) Restart()                     // planned R3: SIGKILL the SUT process group, start it again, wait /healthz; t.Fatal if it cannot. Does NOT reset. Requests in flight fail with transport errors — crash tests state their invariant as bounds (§4 kind 3), not via Result.Conclusive.
+type Target struct{ Pattern, Language, Engine, URL, Label string; Cmd []string; Cwd string; Env map[string]string; Expect map[string]float64 }  // Cwd relative to the target file; Env merged over os.Environ
+func LoadTarget(path) (Target, error); TargetFromEnv() (Target, ok bool, error); TargetEnv(Target) []string  // ★ env round-trip lives here; cmd/harness only calls these
+const EnvTarget, EnvURL, EnvPattern, EnvLanguage, EnvEngine, EnvLabel, EnvRunID, EnvResults, EnvSUTRef  // ★ the HARNESS_* names, defined once
+func ModuleRoot() string; Path(elem ...string) string; RunsDir() string   // ★ <module>/results/runs
+
+// sut — one SUT process. Planned R3. Independent of package harness (harness
+// imports sut, not the reverse) so it takes a Spec, not a Target.
+package sut
+type Spec struct{ Cmd []string; Dir string; Env []string; Stdout, Stderr io.Writer }   // Stdout/Stderr default to a <results dir>/sut.log when run under Main
+type Proc struct{ … }
+func Start(spec Spec) (*Proc, error)      // exec with SysProcAttr{Setpgid: true}; does not wait for health (caller polls /healthz)
+func (p *Proc) Kill() error               // SIGKILL the process group, reap
+func (p *Proc) Stop(grace time.Duration) error   // SIGTERM, wait up to grace, then Kill
+func (p *Proc) Exited() <-chan struct{}   // closed when the process is gone (lets Main notice a SUT that died on its own)
+
+// example-sut/counter — the reference counter as a library. Planned R1/R2.
+package counter
+type Store interface {
+    Incr(ctx, name string, delta int64) (int64, error)   // atomic post-increment value; the primitive under test
+    Get(ctx, name string) (int64, error)                  // 0 when absent
+    Set(ctx, name string, v int64) error                  // ★ exists ONLY so the lost-update bug can be expressed as read+Set; a correct handler never calls it
+    Del(ctx, name string) error
+    Reset(ctx) error
+    Ping(ctx) error                                       // /healthz
+    Close() error
+}
+func NewHandler(s Store) http.Handler      // the contract: routes, name regexp, delta parsing, /healthz → Ping, /_reset → Reset
+func NewMemory() Store
+// bugs are Store decorators, one per invariant they break:
+func LostUpdate(Store) Store               // Incr = Get, yield, Set(old+delta)      → INV-01/02/05
+func DropReset(Store) Store                // Reset is a no-op                        → INV-04
+func WriteBehind(Store, flush time.Duration) Store   // Incr updates an in-memory shadow and responds; a goroutine flushes shadow → Set every `flush`. Consistent unless killed → only INV-06 fails
+func Slow(Store, d time.Duration) Store    // every op sleeps d                       → nothing until [expect] exists
+// engines, each its own package so cmd is the only importer:
+//   store/sqlite.Open(dsn)   modernc.org/sqlite (same driver as the notes CLI; pure Go); WAL, busy_timeout; INSERT … ON CONFLICT DO UPDATE SET value = value + excluded.value RETURNING value
+//   store/valkey.Open(dsn)   github.com/valkey-io/valkey-go; INCRBY / GET / DEL / FLUSHDB on the DB index in the DSN
+//   store/postgres.Open(dsn) github.com/jackc/pgx/v5 via database/sql; same upsert … RETURNING; TRUNCATE
 ```
+
+`cmd/counter` (the reference binary, `example-sut/cmd/counter`):
+
+```
+counter --addr 127.0.0.1:8080 --engine memory|sqlite|valkey|postgres [--dsn …] [--bug none|lost-update|drop-reset|write-behind|slow]
+```
+
+`--dsn` defaults: sqlite → a temp file; valkey → `redis://127.0.0.1:6379/1`;
+postgres → the `infra/postgres.compose.yml` credentials. The binary composes
+`NewHandler(bug(engine))`; there is no engine-specific bug code.
 
 `cmd/harness`:
 
@@ -311,30 +446,139 @@ harness new-suite <pattern>         # scaffolds suites/<pattern>/{CONTRACT.md,IN
 harness targets                     # lists targets/*.toml
 ```
 
-## 10. Phase 1 work breakdown and delegation
+As built: `report` also takes `--pattern` (for `history`), `--run first|a,b`,
+`--runs-dir`; `sql -` reads stdin; `new-suite`/`targets` take `--dir`.
+Queries are read from `<module>/queries/*.sql` at run time (not embedded), so
+editing a `.sql` needs no rebuild. `run --target` checks the file's pattern
+matches the positional one. Empty states (no runs, no targets) exit 0 with a
+hint. `harness run`'s exit code is `go test`'s.
 
-Order matters: **A → B in parallel with C/D/E → F → G**. I (the main
-session) do A, B, F, G myself; they are the pieces where a wrong decision is
-expensive (cgo sink, the `harness.H` glue every test touches, the invariant
-list, and integration). Subagents get well-specified, self-contained packages.
+## 10. Work breakdown
+
+### 10a. Next: the counter as the finished worked example (agreed 2026-09-12)
+
+Goal: after this block the counter is done end to end — contract, suite,
+one Go implementation on all four engines, a target file per engine, runs
+and reports for each — and the harness can start, kill and restart a SUT.
+That is the shape every later pattern (and every other language) starts
+from. Order: **R0 → R1 → R2 ∥ R3 → R4 → R5**. Owners are the roles in
+§10c: **main** (the session), **builder-opus**, **builder-sonnet**,
+**reviewer**. Main keeps the items where a wrong call is expensive or the
+work is the design itself (R1: the API every later item imports; R4: the
+invariant, agreed with the user); everything with a clear spec and a
+mechanical done-when is delegated; **everything is reviewed before it is
+committed** (§10c), including main's own items. Every Owner and
+Reviewed-by cell names both platforms' models (Claude Code / Codex) so an
+item can be resumed from either after a quota limit.
+
+| ID | Task | Owner | Reviewed by | Done when |
+|----|------|-------|-------------|-----------|
+| R0 | Commit the built toolkit as-is together with this plan and the three `.claude/agents/harness-*.md` role definitions; `go mod tidy` (direct deps are currently marked `// indirect`); fix `CONTRACT.md`'s example (`page:home` violates the agreed name regexp — change the example to `page.home`) | main (this session / astra) | main smell test only (already verified work + a one-line doc fix) | `git status` clean except results; `go test ./...` green |
+| R1 | Reference counter as a library: move `example-sut/counter/main.go` into package `counter` (`Store`, `NewHandler`, `NewMemory`, bug decorators `LostUpdate`/`DropReset`/`WriteBehind`/`Slow`) + `example-sut/cmd/counter` binary with `--engine memory` only; `harness.Main` gains `Option` + `InProcess`; `suites/counter` passes `harness.InProcess(func() http.Handler { return counter.NewHandler(counter.NewMemory()) })`. Unit tests in package `counter` per bug: each decorator breaks the invariant it claims and nothing else (memory store, in-process). | main (this session / astra — the API every later item imports) | reviewer (opus high / sol high) | `go test ./...` **runs** the counter suite (no skip) and passes with `-race`; `harness run counter --url …` against `cmd/counter --bug lost-update` still fails INV-01/02/05 |
+| R2 | Engine stores: `store/sqlite`, `store/valkey`, `store/postgres` (§9 APIs, deps listed there); `cmd/counter --engine … --dsn …`; `/healthz` pings the store; four target files `targets/counter-go-{memory,sqlite,valkey,postgres}.toml` each with `cmd`/`cwd` (Q5) so R3 can start them; `README.md` quick start shows one engine end to end. A shared conformance test in package `counter` (`StoreTest(t, func() Store)`) runs against every engine, skipping valkey/postgres when the store is unreachable. Only R2 may touch `go.mod`/`go.sum`. | builder-opus (opus medium / sol medium — three drivers with different quirks — valkey-go's command builder, pgx via `database/sql`, SQLite WAL/busy_timeout — and upsert semantics that *are* the primitive under test) | reviewer (opus high / sol high) | Suite passes against each engine via `harness run counter --target targets/counter-go-<engine>.toml`; `lost-update` fails INV-01 on every engine; `harness report --query history --pattern counter` shows the four runs side by side |
+| R3 | `sut` package (§9) + `harness.Main` integration: start `Target.Cmd` (cwd relative to the target file, env merged) before the health wait, log to `<results dir>/sut.log`, stop at exit / SIGINT / panic; `H.Restartable`, `H.Restart`; `cmd/harness run` prints "started SUT pid …" and fails fast if the process exits before health. Unit tests spawn `example-sut/cmd/counter --engine sqlite --dsn <tmp>` (build once in `TestMain`): start → healthy; kill → connection refused; restart → healthy and state preserved; Stop with grace → clean exit. Files: `sut/*`, `harness/main.go`, `harness/h.go`, `cmd/harness/run.go` only. | builder-sonnet (sonnet high / luna high — self-contained, §9 gives the signatures, the tests are the spec) | reviewer (opus high / sol high — process-group kill, reaping, and the SIGINT/panic paths are where races hide) | tests green with `-race`; `harness run counter --target targets/counter-go-sqlite.toml` starts and stops the SUT itself |
+| R4 | INV-COUNTER-06 in `INVARIANTS.md` (agree wording with the user first): *After the SUT is killed and restarted mid-load, the final value is bounded by `2xx-before-kill ≤ final ≤ 2xx-before-kill + errored`: every acknowledged increment survives, and no increment is acknowledged before it is committed.* Guaranteed by: respond only after the store's atomic write returns (application discipline); the store's own persistence. Kind: crash, must. Test: `ClosedFor` workers on one name; `h.Restart()` once from a goroutine after ~⅓ of the expected requests (count-triggered, not time-triggered); tally 2xx before the kill and transport errors around it; `GET` after restart; skip when `!h.Restartable()`. Counter's crash test lands here rather than on a pattern that does not exist yet. | main (this session / astra — the invariant, agreed with the user) | reviewer (opus high / sol high) | passes on `--engine sqlite\|valkey\|postgres --bug none`; fails INV-06 on `--bug write-behind` (each engine); skips on memory / `--url` targets |
+| R5 | De-phase every doc: this file's remaining "phase" wording, `AGENTS.md` (steps 2.4, 4), `README.md` (targets, new-suite), `knowledge/harness.md` (implemented vs planned), `harness/h.go` Target comments, `target.go` LoadTarget comment, `cmd/harness/templates/invariants.md.tmpl` answer 4, `suites/counter/INVARIANTS.md` answer 4 (now INV-06). Update `knowledge/index.md` if entries change; record lessons with the `update-trinkets-knowledge` skill. | builder-sonnet (sonnet high / luna high — mechanical sweep; must verify every claim against the code as it stands after R1–R4) | reviewer (opus high / sol high — docs are the post-context-clear truth; checks each statement against source) | `grep -ri "phase [0-9]" harness/ knowledge/` finds nothing; `knowledge/harness.md` describes only what exists |
+
+### 10c. Working protocol (roles, review, commits, the log)
+
+Purpose: keep main's context thin — design, decisions, the §0 log, and a
+final smell test — and make every commit a reviewed one.
+
+**Roles** — the roles are tool-agnostic; the model behind each depends on
+which harness runs the session. Under Claude Code they are project agent
+definitions under `.claude/agents/` (frontmatter keys `model`, `effort`,
+`tools`; effort is fixed per definition, so one file per role). Under
+Codex the same roles map to Codex models as in the last column: the
+**controlling agent is `astra`** and owns everything marked main; wherever
+this plan says Sonnet use **`luna` at high effort**; wherever it says Opus
+use **`sol`** at the effort given. The role's job, tool restriction, brief
+and report format do not change.
+
+| Role | Claude Code file | Claude Code frontmatter | Codex model | Job |
+|------|------------------|-------------------------|-------------|-----|
+| main | this session | — | `astra` (controlling agent) | owns this plan and §0, decisions, R1/R4, briefs, dispatch, final smell test, commits |
+| builder-opus | `.claude/agents/harness-builder-opus.md` | `model: opus`, `effort: medium` | `sol`, medium | R2 |
+| builder-sonnet | `.claude/agents/harness-builder-sonnet.md` | `model: sonnet`, `effort: high` | `luna`, high | R3, R5 |
+| reviewer | `.claude/agents/harness-reviewer.md` | `model: opus`, `effort: high`, `tools: Read, Grep, Glob, Bash` (no edits) | `sol`, high, read-only | reviews every R-item before commit |
+
+The `.claude/agents/harness-*.md` bodies are the role briefs; a Codex
+session reads them as prose (ignore the frontmatter) and applies the model
+column above.
+
+**One R-item, start to commit:**
+
+1. **Kick-off** — main appends to §0: `R<n> started → <owner>`. For a
+   delegated item main writes a self-contained brief: the R-row verbatim,
+   the §9 block it implements (copied, not referenced), the file list it may
+   touch, "match surrounding style, stdlib first, only the deps §9 lists",
+   the done-when line, and the report format below. Builders do not commit
+   and do not edit this file; if they need a decision they stop and ask in
+   their report.
+2. **Build** — builder works in the shared working tree on its file list
+   (R2 ∥ R3 are disjoint; only R2 touches `go.mod`). Builder's report:
+   files changed, how it verified (commands + one-line outcomes),
+   deviations from §9 with reasons, open questions. Nothing else.
+3. **Review** — main dispatches **reviewer** with the same brief plus the
+   builder's report. Reviewer runs `go build ./... && go vet ./... && go test
+   -race ./...` and the item's done-when commands, reads the diff against
+   §9 and the done-when, and reports findings ranked must-fix / should / nit,
+   each with `file:line` and a concrete failure scenario. Reviewer never
+   edits. Must-fix and should findings go back to the *same* builder agent
+   (SendMessage — keeps its context) and the reviewer re-checks; loop until
+   the reviewer reports clean or nits only. Main's own items (R1, R4) go
+   through the same reviewer step.
+4. **Land** — main reads only the reviewer's final verdict and the builder's
+   report (not the diff, unless a finding needs a decision); runs a smell
+   test (`git status`, `git diff --stat`, one done-when command); updates §9
+   if the API deviated (plan first, then code is truth); appends to §0:
+   `R<n> reviewed clean (<k> findings fixed) → committed <sha>`; commits
+   **one commit per R-item** with the item in the subject.
+5. **After a context clear** — the new session reads the last §0 entries,
+   `git log --oneline -5`, and `git status`. Anything in the tree but not in
+   §0 as committed is in-flight: dispatch the reviewer on the diff before
+   touching it. Running agents do not survive a clear; their work in the
+   tree does.
+
+**§0 entries are mandatory at:** item start, delegation, review verdict,
+commit, any decision change (§2/§9 first, then a §0 line pointing at it),
+and any blocker or open question for the user.
+
+### 10b. History: the first block (built 2026-09-12)
+
+Order was: **A → B in parallel with C/D/E → F → G**. The main session did A,
+B, F, G (cgo sink, the `harness.H` glue every test touches, the invariant
+list, integration); subagents got self-contained packages.
 
 | ID | Task | Owner | Inputs | Done when |
 |----|------|-------|--------|-----------|
-| A | Module skeleton: `harness/go.mod`, folder layout from §5, root `.gitignore` additions (`harness/results/`, `systems-trinkets` binary), `results` row types **and Sink** (appender collector, SIGINT/panic-safe export, `NewRunID`) | **me** | §6, §9 | `go test ./results/` writes 5 parquet files from an in-memory sink and reads p99 back via `read_parquet`; 100k samples in < 1 s |
-| B | `harness` package: `Main`, `New`, `H`, `Target` (TOML loader, `HARNESS_TARGET`/`HARNESS_URL`), reset/health handshake, `TestRow` on cleanup | **me** | A | A dummy suite against `example-sut` records run + test rows |
-| C | `hx` client: `Do`/`Get`/`Post`/`Delete`, path templates, JSON in/out, timeouts, context values for worker/phase/seq, sample recording through an injected recorder interface (so it does not import DuckDB) | **sonnet** subagent | §9 signatures, recorder interface from A | Unit tests with `httptest.Server`; every request yields exactly one sample; non-2xx not an error; transport error is |
-| D | `load` package: `Closed`, `ClosedFor`, `Phase`, barrier start, `Result` aggregation, `-race` clean | **sonnet** subagent | §9 signatures | Unit tests prove all workers start after the barrier, counts add up, ctx cancel stops workers |
-| E | `example-sut/counter`: Go `net/http` server implementing `suites/counter/CONTRACT.md`, in-memory, flags `--addr`, `--bug none|lost-update|drop-reset|slow`; `lost-update` does a racy read-modify-write with a `runtime.Gosched()` | **sonnet** subagent | CONTRACT.md from F | `go vet`, runs, `curl` smoke; `--bug lost-update` observably loses increments under 32 goroutines |
-| F | `suites/counter/CONTRACT.md` + `INVARIANTS.md` via the §8 interview with the user; then `counter_test.go` (sequential contract test, concurrent increment invariant, reset semantics, perf metrics) | **me** (interview + tests) | B, C, D | Passes against `example-sut --bug none`; fails on `INV-COUNTER-01` against `--bug lost-update` |
-| G | `cmd/harness`: `run`, `report` (canned SQL in `queries/`, views over `results/runs/*/`), `sql`, `new-suite` (templates), `targets`; `check` package | **opus** subagent for CLI + queries; `check` is small enough that I do it in B | A, B | `harness run counter --url …` then `harness report --run last` prints summary + latency tables from parquet; `new-suite foo` compiles |
-| H | `infra/valkey.compose.yml`, `infra/postgres.compose.yml`, `harness/README.md` (how to run; points here) | **sonnet** subagent | §5 | `docker compose -f … up -d` works; README accurate |
+| A ✅ | Module skeleton: `harness/go.mod`, folder layout from §5, root `.gitignore` additions (`harness/results/`, `systems-trinkets` binary), `results` row types **and Sink** (appender collector, SIGINT/panic-safe export, `NewRunID`) | **me** | §6, §9 | `go test ./results/` writes 5 parquet files from an in-memory sink and reads p99 back via `read_parquet`; 100k samples in < 1 s |
+| B ✅ | `harness` package: `Main`, `New`, `H`, `Target` (TOML loader, `HARNESS_TARGET`/`HARNESS_URL`), reset/health handshake, `TestRow` on cleanup | **me** | A | A dummy suite against `example-sut` records run + test rows |
+| C ✅ | `hx` client: `Do`/`Get`/`Post`/`Delete`, path templates, JSON in/out, timeouts, context values for worker/phase/seq, sample recording through an injected recorder interface (so it does not import DuckDB) | **sonnet** subagent | §9 signatures, recorder interface from A | Unit tests with `httptest.Server`; every request yields exactly one sample; non-2xx not an error; transport error is |
+| D ✅ | `load` package: `Closed`, `ClosedFor`, `Phase`, barrier start, `Result` aggregation, `-race` clean | **sonnet** subagent | §9 signatures | Unit tests prove all workers start after the barrier, counts add up, ctx cancel stops workers |
+| E ✅ | `example-sut/counter`: Go `net/http` server implementing `suites/counter/CONTRACT.md`, in-memory, flags `--addr`, `--bug none|lost-update|drop-reset|slow`; `lost-update` does a racy read-modify-write with a `runtime.Gosched()` | **sonnet** subagent | CONTRACT.md from F | `go vet`, runs, `curl` smoke; `--bug lost-update` observably loses increments under 32 goroutines |
+| F ✅ | `suites/counter/CONTRACT.md` + `INVARIANTS.md` via the §8 interview with the user; then `counter_test.go` (sequential contract test, concurrent increment invariant, reset semantics, perf metrics) | **me** (interview + tests) | B, C, D | Passes against `example-sut --bug none`; fails on `INV-COUNTER-01` against `--bug lost-update` |
+| G ✅ | `cmd/harness`: `run`, `report` (canned SQL in `queries/`, views over `results/runs/*/`), `sql`, `new-suite` (templates), `targets`; `check` package | **opus** subagent for CLI + queries; `check` is small enough that I do it in B | A, B | `harness run counter --url …` then `harness report --run last` prints summary + latency tables from parquet; `new-suite foo` compiles |
+| H ✅ | `infra/valkey.compose.yml`, `infra/postgres.compose.yml`, `harness/README.md` (how to run; points here) | **sonnet** subagent | §5 | `docker compose -f … up -d` works; README accurate |
 
 Subagent briefs must include: the exact §9 signatures, the recorder interface
 from A (so `hx`/`load` never import DuckDB), "match the surrounding code
 style, stdlib first, no new deps without listing them", and the done-when
 line. I review every subagent result before integrating (F/G depend on it).
 
-Phase 2 and 3 get their own breakdown here when Phase 1 is done.
+**Verification (2026-09-12):** `go test ./...` green (suites skip
+without a target); `harness run counter --url …` against `example-sut --bug
+none` passes all 4 tests / 23 checks; against `--bug lost-update` fails
+INV-COUNTER-01, -02, -05 with named invariants (≈5k of 6.4k increments lost);
+against `--bug drop-reset` fails INV-COUNTER-04. `harness report` (`summary`,
+`latency`, `checks`, `compare`, `history`), `sql`, `new-suite`, `targets` all
+work from the Parquet files. Notes carried forward:
+
+- `--bug slow` exists but nothing asserts on it (perf is recorded only); it
+  becomes useful once `[expect]` thresholds exist (§7 backlog).
+- `harness run`'s exit code is `go test`'s, so a CI step can gate on it.
+- The Appender path handled 6.4k samples/test with no visible overhead;
+  the sampling knob in §11 is not needed yet.
 
 ## 11. Open questions / risks
 
