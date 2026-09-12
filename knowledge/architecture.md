@@ -18,7 +18,8 @@ Run Go commands from the module being changed. The harness's imports such as
 
 `main.go` parses global `--db`, resolves the database from the flag, then
 `TRINKETS_DB`, then `./trinkets.db`, and dispatches the resource command. The
-`help` and `version` paths return before opening SQLite. Other commands call
+`help` and `version` paths return before opening SQLite. The seed dry-run path copies a read-only source through the SQLite backup API
+and migrates only that temporary copy. Other database commands call
 `openDB` first, so schema creation and migrations happen on first use before a
 command handler runs.
 
@@ -30,8 +31,10 @@ The source ownership is deliberately plain:
 - `cmd_pattern.go`, `cmd_engine.go`, `cmd_approach.go`, and `cmd_attempt.go`:
   flag parsing and CRUD behavior for the four resources.
 - `cmd_matrix.go`: the pattern × engine view.
-- `seed.go`: the in-code catalog derived from `docs/systems-patterns.md` and
-  one core-map approach per pattern/engine.
+- `seed_catalog.go`: the ordered in-code curriculum with three core-map
+  approaches per pattern; `docs/systems-patterns.md` is its readable guide.
+- `seed.go` and `reconcile.go`: transactional seed upserts, explicit legacy
+  identity reconciliation, conflict reports, and read-only-source previews.
 - `output.go`: custom flags, JSON output, and tabular formatting.
 
 The conceptual relationship is:

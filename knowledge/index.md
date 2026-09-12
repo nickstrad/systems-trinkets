@@ -9,8 +9,8 @@ the linked design documents as the authority when they disagree.
 - [Repository architecture](architecture.md) — root Go module, startup flow,
   ownership of the main packages, and the implemented/planned boundary.
 - [CLI, schema, and store pitfalls](cli-and-store.md) — SQLite constraints,
-  migrations, JSON list fields, CRUD semantics, and deletion/foreign-key
-  behavior that agents must preserve.
+  migrations, curriculum reconciliation and read-only previews, JSON list
+  fields, CRUD semantics, and deletion/foreign-key behavior.
 - [HTTP invariant harness](harness.md) — the separate Go module, current
   package contracts, result pipeline, target lifecycle, and the pieces still
   described only by the harness plan.
