@@ -11,26 +11,30 @@ import (
 	"testing"
 )
 
-func legacyCatalog(t *testing.T) (string, *sql.DB) {
+// reconciliationDB creates only the rows needed to exercise retention, rename,
+// and removal. Descriptive catalog content is irrelevant to these tests.
+func reconciliationDB(t *testing.T, slugs ...string) (string, *sql.DB) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "catalog.db")
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fixture, err := os.ReadFile("testdata/legacy-catalog.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(string(fixture)); err != nil {
-		t.Fatal(err)
-	}
-	db.Close()
-	db, err = openDB(path)
+	db, err := openDB(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
+	if len(slugs) == 0 {
+		slugs = []string{"counter", "dedup", "lock"}
+	}
+	for _, slug := range []string{"valkey", "sqlite", "postgres"} {
+		execTestSQL(t, db, `INSERT INTO engines(slug,name,created_at,updated_at)
+			VALUES(?,?,'original','original')`, slug, slug)
+	}
+	for _, slug := range slugs {
+		execTestSQL(t, db, `INSERT INTO patterns(slug,name,created_at,updated_at)
+			VALUES(?,?,'original','original')`, slug, slug)
+		execTestSQL(t, db, `INSERT INTO approaches(pattern_id,engine_id,title,primitives,created_at,updated_at)
+			SELECT p.id,e.id,'core map sketch','test primitive','original','original'
+			FROM patterns p CROSS JOIN engines e WHERE p.slug=?`, slug)
+	}
 	return path, db
 }
 
@@ -93,7 +97,7 @@ func checkCatalog(t *testing.T, db *sql.DB) {
 }
 
 func TestReconcileBaselineIdentityAndIdempotence(t *testing.T) {
-	_, db := legacyCatalog(t)
+	_, db := reconciliationDB(t)
 	type identity struct {
 		ID      int64
 		Created string
@@ -157,7 +161,7 @@ func TestReconcileBaselineIdentityAndIdempotence(t *testing.T) {
 			retained++
 		}
 	}
-	if retained != 19 {
+	if retained != 2 {
 		t.Fatalf("retained %d", retained)
 	}
 	rows, err = db.Query(`SELECT id,created_at FROM approaches`)
@@ -181,7 +185,7 @@ func TestReconcileBaselineIdentityAndIdempotence(t *testing.T) {
 		}
 	}
 	rows.Close()
-	if total != 87 || preserved != 57 {
+	if total != 87 || preserved != 6 {
 		t.Fatalf("approaches total %d preserved %d", total, preserved)
 	}
 	first := catalogSnapshot(t, db)
@@ -204,10 +208,55 @@ func TestReconcileBaselineIdentityAndIdempotence(t *testing.T) {
 	}
 }
 
+// Keep the supported rename/removal cases explicit: deriving expectations from
+// curriculumRenames or curriculumRetirements would hide accidental omissions.
+func TestReconcileSupportedCatalogChanges(t *testing.T) {
+	cases := []struct{ old, replacement string }{
+		{"dedup", "inbox"},
+		{"expiring-uniqueness", "expiring-reservation"},
+		{"retry-queue", "retry-lifecycle"},
+		{"fixed-window-rate-limiter", "rate-limiter"},
+		{"pubsub", "notification-vs-delivery"},
+		{"materialized-view", "incremental-projection"},
+		{"ttl-cache", "cache-consistency"},
+		{"session-store", ""},
+		{"distributed-coordination", ""},
+		{"lock", ""},
+		{"secondary-index", ""},
+		{"time-ordered-data", ""},
+		{"leaderboard", ""},
+		{"dead-letter-queue", ""},
+		{"sliding-window-rate-limiter", ""},
+		{"token-bucket", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.old, func(t *testing.T) {
+			_, db := reconciliationDB(t, tc.old)
+			before, err := getPattern(db, tc.old)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := reconcileCatalog(db, false, nil); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := getPattern(db, tc.old); !errors.Is(err, errNotFound) {
+				t.Fatalf("old slug still present: %v", err)
+			}
+			if tc.replacement != "" {
+				after, err := getPattern(db, tc.replacement)
+				if err != nil || after.ID != before.ID || after.CreatedAt != before.CreatedAt {
+					t.Fatalf("rename lost identity: %+v, %v", after, err)
+				}
+			}
+			checkCatalog(t, db)
+		})
+	}
+}
+
 func TestReconcileRollbackStages(t *testing.T) {
 	for _, stage := range []string{"rename", "upsert", "delete"} {
 		t.Run(stage, func(t *testing.T) {
-			_, db := legacyCatalog(t)
+			_, db := reconciliationDB(t)
 			before := catalogSnapshot(t, db)
 			_, err := reconcileCatalog(db, false, func(s string) error {
 				if s == stage {
@@ -240,7 +289,7 @@ func TestReconcileConflicts(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, db := legacyCatalog(t)
+			_, db := reconciliationDB(t)
 			execTestSQL(t, db, tc.sql)
 			before := catalogSnapshot(t, db)
 			for _, dry := range []bool{true, false} {
@@ -260,7 +309,7 @@ func TestReconcileConflicts(t *testing.T) {
 }
 
 func TestReconcileRetainedAuthoredHistory(t *testing.T) {
-	_, db := legacyCatalog(t)
+	_, db := reconciliationDB(t)
 	execTestSQL(t, db, `UPDATE patterns SET notes='my notes' WHERE slug='counter'`)
 	execTestSQL(t, db, `UPDATE approaches SET writeup='my implementation' WHERE pattern_id=(SELECT id FROM patterns WHERE slug='counter')`)
 	execTestSQL(t, db, `INSERT INTO approaches(pattern_id,engine_id,title,primitives,writeup,created_at,updated_at) SELECT p.id,e.id,'authored','my primitives','my prose','original','original' FROM patterns p,engines e WHERE p.slug='counter' AND e.slug='sqlite'`)
@@ -315,11 +364,18 @@ func TestDryRunDoesNotMigrateSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixture, err := os.ReadFile("testdata/legacy-catalog.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	execTestSQL(t, db, string(fixture))
+	// This test needs a database missing curriculum_order, not an old catalog.
+	// Define that table independently of schemaSQL so a production schema change
+	// cannot silently remove the migration condition under test.
+	execTestSQL(t, db, `CREATE TABLE patterns (
+		id INTEGER PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+		family TEXT NOT NULL DEFAULT '', explanation TEXT NOT NULL DEFAULT '',
+		use_cases TEXT NOT NULL DEFAULT '', invariants TEXT NOT NULL DEFAULT '[]',
+		readings TEXT NOT NULL DEFAULT '[]', notes TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+	)`)
+	execTestSQL(t, db, `INSERT INTO patterns(slug,name,created_at,updated_at)
+		VALUES('counter','Counter','original','original')`)
 	db.Close()
 	before, err := os.ReadFile(path)
 	if err != nil {
@@ -389,7 +445,7 @@ func TestBackupIncludesCommittedWAL(t *testing.T) {
 }
 
 func TestOrdinarySeedKeepsLegacyAndCustomContent(t *testing.T) {
-	_, db := legacyCatalog(t)
+	_, db := reconciliationDB(t)
 	execTestSQL(t, db, `INSERT INTO patterns(slug,name,notes,created_at,updated_at) VALUES('custom','Custom','mine','then','then')`)
 	for _, args := range [][]string{nil, {"--update"}} {
 		if err := cmdSeed(db, args); err != nil {
@@ -403,7 +459,7 @@ func TestOrdinarySeedKeepsLegacyAndCustomContent(t *testing.T) {
 }
 
 func TestSeedOrderSwapAndOccupiedCustomOrder(t *testing.T) {
-	_, db := legacyCatalog(t)
+	_, db := reconciliationDB(t)
 	if _, err := reconcileCatalog(db, false, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -426,7 +482,7 @@ func TestSeedOrderSwapAndOccupiedCustomOrder(t *testing.T) {
 }
 
 func TestApplyRechecksConflictsAfterPreview(t *testing.T) {
-	_, db := legacyCatalog(t)
+	_, db := reconciliationDB(t)
 	if _, err := reconcileCatalog(db, true, nil); err != nil {
 		t.Fatal(err)
 	}

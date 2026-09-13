@@ -19,12 +19,13 @@ artifacts are needed, with a `README.md` explaining them. Update
 purpose. Prefer updating an existing entry over creating a duplicate.
 
 When database schema, migrations, relationships, or column semantics change,
-read `docs/schema/AGENTS.md` and update both `docs/schema/index.html` and
-`docs/schema/erd.html` in the same change. Keep applicable knowledge current too.
+read `cli/docs/schema/AGENTS.md` and update both `cli/docs/schema/index.html` and
+`cli/docs/schema/erd.html` in the same change. Keep applicable knowledge current too.
 
-The root CLI and `harness/` are separate Go modules; checks from the root do not
-cover the nested module. Use a temporary database via `--db` for CLI experiments:
-the repository's `trinkets.db` is shared data tracked intentionally.
+The metadata CLI in `cli/` and the test toolkit in `harness/` are separate Go
+modules. Run `go -C cli test ./...` and `go -C harness test ./...` from the
+repository root; there is no root Go module. Use a temporary database via `--db` for CLI experiments:
+the repository's `cli/trinkets.db` is shared data tracked intentionally.
 
 `AGENTS.md` is a relative symlink to this file. Edit this file to maintain both
 agent entrypoints together.

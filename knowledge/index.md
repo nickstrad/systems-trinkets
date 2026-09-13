@@ -6,18 +6,18 @@ the linked design documents as the authority when they disagree.
 
 ## Writeups
 
-- [Repository architecture](architecture.md) — root Go module, startup flow,
+- [Repository architecture](architecture.md) — CLI and harness Go modules, startup flow,
   ownership of the main packages, and the implemented/planned boundary.
 - [CLI, schema, and store pitfalls](cli-and-store.md) — SQLite constraints,
   migrations, curriculum reconciliation and read-only previews, JSON list
-  fields, CRUD semantics, and deletion/foreign-key behavior.
+  fields, CRUD semantics, deletion/foreign-key behavior, and self-contained test setup.
 - [HTTP invariant harness](harness.md) — the separate Go module: package
   contracts, results pipeline, harness-managed SUT lifecycle and crash tests,
   the counter reference on four engines, batch runs, signal/export races, and
   what is still backlog.
 
 The schema companion pages are maintained separately:
-[schema index](../docs/schema/index.html) and [schema ERD](../docs/schema/erd.html).
+[schema index](../cli/docs/schema/index.html) and [schema ERD](../cli/docs/schema/erd.html).
 
 ## Maintaining this index
 

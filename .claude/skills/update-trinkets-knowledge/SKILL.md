@@ -27,7 +27,7 @@ repository root, not from the skill directory.
    such as a minimal reproduction or diagram. Put the explanation and artifact
    map in its `README.md`; keep artifacts minimal and reviewable. Link existing
    repo documentation rather than copying it. Link the schema reference at
-   `docs/schema/index.html` and `docs/schema/erd.html` when relevant.
+   `cli/docs/schema/index.html` and `cli/docs/schema/erd.html` when relevant.
 5. Update `knowledge/index.md` in the same change. List every top-level writeup
    other than the index itself, or each topic folder linked to its `README.md`,
    with a concise purpose. Keep each folder's README artifact map current.
@@ -37,7 +37,7 @@ repository root, not from the skill directory.
    database for CLI experiments. Report what knowledge changed and what evidence
    supports it in the task handoff.
 
-For schema or migration changes, also follow `docs/schema/AGENTS.md` and update
+For schema or migration changes, also follow `cli/docs/schema/AGENTS.md` and update
 both HTML pages. Keep prose explanations here focused on lessons and pitfalls
 rather than duplicating the column catalog.
 

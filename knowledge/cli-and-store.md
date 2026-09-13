@@ -1,7 +1,8 @@
 # CLI, schema, and store pitfalls
 
-Read [db.go](../db.go), [store.go](../store.go), and the command handlers
-before changing persistence behavior. These are the invariants most likely to
+Read [db.go](../cli/db.go), [store.go](../cli/store.go), and the command handlers
+in `cli/` before changing persistence behavior. Unqualified source paths below
+are relative to that module. These are the invariants most likely to
 be accidentally weakened by a seemingly small edit.
 
 ## Schema and connection behavior
@@ -105,11 +106,15 @@ Pattern lists and the final matrix sort place ordered rows first, then NULL
 custom rows by family/slug. `Pattern.CurriculumOrder` is `*int`, exposing a JSON
 number or null rather than a nullable-wrapper object.
 
-Root `go test ./...` covers fresh/legacy migration, negative SQL constraints,
+`go -C cli test ./...` from the repository root covers fresh/legacy migration, negative SQL constraints,
 identity/history preservation, injected rollback after rename/upsert/delete,
 repeat-run write rejection, source-byte-preserving dry runs, and backup of a
-live committed WAL. These checks use temporary databases and the historical
-`testdata/legacy-catalog.sql` fixture; they do not modify the shared database.
+live committed WAL. These checks create temporary databases directly in test code; they do not
+modify the shared database. Reconciliation tests use minimal synthetic rows
+for retained, renamed, and retired patterns instead of a historical catalog
+dump. Migration tests define the old table shape explicitly, independently
+of production DDL, so the missing-column condition cannot disappear when
+the current schema changes.
 
 Pattern/engine deletion pre-counts dependent approaches and attempts and
 requires `--force` when dependents exist; SQLite cascades the dependent rows

@@ -37,6 +37,8 @@ go.work.sum
 *.db-shm
 /trinkets
 /systems-trinkets
+/cli/bin/
+/cli/cli
 
 # harness: run results (parquet) and built binaries (go build -o bin/… ./cmd/harness)
 /harness/results/runs/

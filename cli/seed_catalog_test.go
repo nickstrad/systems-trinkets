@@ -36,7 +36,7 @@ func TestCanonicalCurriculumStructure(t *testing.T) {
 }
 
 func TestReconciledContentMatchesCanonicalDefinitions(t *testing.T) {
-	_, db := legacyCatalog(t)
+	_, db := reconciliationDB(t)
 	if _, err := reconcileCatalog(db, false, nil); err != nil {
 		t.Fatal(err)
 	}

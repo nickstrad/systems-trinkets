@@ -6,24 +6,24 @@ SQLite database so the notes stay as portable as the subject matter.
 
 - [docs/systems-patterns.md](docs/systems-patterns.md) — the guide: the core map
   of pattern to primitives, and the questions to ask of each one.
-- [docs/trinkets-cli.md](docs/trinkets-cli.md) — the `trinkets` CLI and its
+- [cli/docs/trinkets-cli.md](cli/docs/trinkets-cli.md) — the `trinkets` CLI and its
   schema.
+- [cli/](cli/README.md) — the supporting metadata tool, its source and tests.
+- [harness/](harness/README.md) — HTTP invariant tests for pattern implementations.
 
 The active curriculum is an ordered catalog of 29 exercises, from atomic
-counters through partition rebalancing. `seed_catalog.go` is the executable
+counters through partition rebalancing. `cli/seed_catalog.go` is the executable
 source of truth; the guide mirrors its contracts and Valkey/SQLite/PostgreSQL
 core sketches. The current harness has the counter concurrency suite; process
 restart and operation-history capabilities are planned, while independently
 failing multi-node support is deferred.
 
-```sh
-go build -o trinkets .
-./trinkets seed      # load the patterns and engines from the guide
-./trinkets matrix    # the core map, as stored
-./trinkets pattern show fifo-queue
-```
+The metadata tool, database, and CLI documentation are colocated in `cli/`.
+See [cli/README.md](cli/README.md) for its layout and full usage.
 
-Use `./trinkets seed --update` to refresh seed-owned fields. The explicit
-catalog replacement is `./trinkets seed --update --prune`; preview it with
-`./trinkets --db /path/to/copy.db seed --update --prune --dry-run`. Ordinary
-seeding does not remove retired rows or rename user data.
+```sh
+cd cli
+go build -o bin/trinkets .
+./bin/trinkets matrix
+./bin/trinkets pattern show fifo-queue
+```

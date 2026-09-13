@@ -1,7 +1,7 @@
 # Systems Patterns with Valkey, SQLite, and PostgreSQL
 
 This guide is the readable companion to the executable catalog in
-[`seed_catalog.go`](../seed_catalog.go). That Go file is the source of truth for
+[`cli/seed_catalog.go`](../cli/seed_catalog.go). That Go file is the source of truth for
 seeded names, slugs, explanations, invariants, readings, and the three engine
 sketches. The catalog has exactly 29 patterns, three engines, and one core
 approach per pattern/engine pair.
@@ -124,7 +124,7 @@ then record the result in `approach` and `attempt` rows. The key question is:
 
 ## Pattern readings
 
-The exact title and URL pairs are seeded from `seed_catalog.go`; the links below
+The exact title and URL pairs are seeded from `cli/seed_catalog.go`; the links below
 provide the same quick map for readers.
 
 - `counter`: [Valkey INCR](https://valkey.io/commands/incr/), [PostgreSQL UPDATE](https://www.postgresql.org/docs/current/sql-update.html)

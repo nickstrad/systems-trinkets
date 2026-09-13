@@ -45,7 +45,7 @@
     <nav class="nav" aria-label="Schema pages"><a aria-current="page" href="index.html">Reference</a><a href="erd.html">Relationship map</a></nav>
   </div></header>
   <main>
-    <p class="lede">The catalog joins reusable <em>patterns</em> to storage <em>engines</em>, records alternative <em>approaches</em>, and tracks hands-on <em>attempts</em>. This is the live schema implemented by <code>db.go</code> and the behavior exposed by the store and CLI.</p>
+    <p class="lede">The catalog joins reusable <em>patterns</em> to storage <em>engines</em>, records alternative <em>approaches</em>, and tracks hands-on <em>attempts</em>. This is the live schema implemented by <code>cli/db.go</code> and the behavior exposed by the store and CLI.</p>
     <div class="facts" aria-label="Schema facts">
       <div class="fact"><b>Tables</b><span>patterns · engines · approaches · attempts</span></div>
       <div class="fact"><b>Database mode</b><span>SQLite, WAL; foreign keys enabled on every CLI connection</span></div>
@@ -135,7 +135,7 @@
     <div class="constraint"><h3>patterns.readings</h3><p>Added as a required JSON-array TEXT column with default <code>[]</code>; existing legacy non-JSON values are split into lines and rewritten as reading objects.</p></div>
     <div class="constraint"><h3>patterns.invariant → invariants</h3><p>Legacy single-text <code>invariant</code> is converted line-by-line into the JSON-array <code>invariants</code> column, then the old column is dropped.</p></div>
     <div class="constraint"><h3>patterns.curriculum_order</h3><p>A nullable positive-integer column is added to older databases in a transaction, followed by the partial unique index <code>CREATE UNIQUE INDEX patterns_curriculum_order_unique ON patterns (curriculum_order) WHERE curriculum_order IS NOT NULL</code>. The migration is idempotent and leaves newly upgraded rows NULL until seeding or reconciliation assigns positions. If an existing order column or index has an incompatible definition, opening fails instead of accepting weaker constraints.</p></div>
-    <p class="foot">Source of truth: <code>db.go</code> defines DDL and migrations; <code>store.go</code> defines typed reads, JSON handling, timestamps, ordering, and joins; the command handlers define deletion workflow. See the <a href="erd.html">relationship map</a> for the diagram.</p>
+    <p class="foot">Source of truth: <code>cli/db.go</code> defines DDL and migrations; <code>cli/store.go</code> defines typed reads, JSON handling, timestamps, ordering, and joins; the command handlers define deletion workflow. See the <a href="erd.html">relationship map</a> for the diagram.</p>
   </main>
 </body>
 </html>

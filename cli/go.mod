@@ -1,4 +1,4 @@
-module systems-trinkets
+module systems-trinkets/cli
 
 go 1.26.4
 

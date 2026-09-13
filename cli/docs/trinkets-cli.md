@@ -1,13 +1,15 @@
 # trinkets — CLI and schema
 
 `trinkets` is a small Go + SQLite CLI for keeping notes on the patterns in
-[systems-patterns.md](systems-patterns.md): what each pattern is, how each
+[systems-patterns.md](../../docs/systems-patterns.md): what each pattern is, how each
 storage engine could build it, and what happened when I tried.
 
-```
-go build -o trinkets .
-./trinkets seed
-./trinkets matrix
+From `cli/`:
+
+```sh
+go build -o bin/trinkets .
+./bin/trinkets seed
+./bin/trinkets matrix
 ```
 
 The database is `./trinkets.db` unless `--db PATH` or `$TRINKETS_DB` says
@@ -141,7 +143,7 @@ outlives the writeup of how.
 ### Seeding
 
 `trinkets seed` loads the three engines, the 29 patterns, and one `core map
-sketch` approach per pattern/engine cell from `seed_catalog.go`. It inserts
+sketch` approach per pattern/engine cell from `cli/seed_catalog.go`. It inserts
 missing rows and leaves existing seed-owned fields alone. `--update` refreshes
 seed-owned fields and primitives while preserving pattern notes, authored writeups,
 attempts, IDs, and creation timestamps. Neither mode removes or renames rows.
