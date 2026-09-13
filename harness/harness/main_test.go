@@ -38,14 +38,12 @@ func TestInProcessWritesResultsOnlyWhenAsked(t *testing.T) {
 	if testing.Short() {
 		t.Skip("spawns go test")
 	}
-	runs := RunsDir()
-	before, _ := os.ReadDir(runs)
-
 	// Without HARNESS_RESULTS: the suite runs, nothing is recorded anywhere.
-	runCounterSuite(t)
-	after, _ := os.ReadDir(runs)
-	if len(after) != len(before) {
-		t.Fatalf("in-process run without HARNESS_RESULTS wrote to %s (%d → %d entries)", runs, len(before), len(after))
+	// A fixed run id makes the check exact even if other runs land in
+	// results/runs/ concurrently.
+	runCounterSuite(t, EnvRunID+"=run-in-process-discard")
+	if _, err := os.Stat(filepath.Join(RunsDir(), "run-in-process-discard")); err == nil {
+		t.Fatalf("in-process run without HARNESS_RESULTS wrote to %s", RunsDir())
 	}
 
 	// With HARNESS_RESULTS: a full run directory with the synthesised target.

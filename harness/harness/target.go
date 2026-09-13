@@ -23,8 +23,10 @@ const (
 	EnvSUTRef   = "HARNESS_SUT_REF"  // free-text SUT version, recorded on the run
 )
 
-// LoadTarget reads a targets/<name>.toml file. Relative paths inside it (Cwd)
-// are left as written; the sut package resolves them in phase 2.
+// LoadTarget reads a targets/<name>.toml file. Cwd is resolved against the
+// target file's own directory, so `cwd = ".."` in targets/x.toml means the
+// harness module root, and an omitted cwd means targets/ itself — never the
+// working directory of whoever happens to run the suite.
 func LoadTarget(path string) (Target, error) {
 	var t Target
 	md, err := toml.DecodeFile(path, &t)
@@ -39,6 +41,13 @@ func LoadTarget(path string) (Target, error) {
 	}
 	if t.Pattern == "" {
 		return t, fmt.Errorf("target %s: pattern is required", path)
+	}
+	if !filepath.IsAbs(t.Cwd) {
+		abs, err := filepath.Abs(filepath.Join(filepath.Dir(path), t.Cwd)) // t.Cwd == "" → the target file's own directory
+		if err != nil {
+			return t, fmt.Errorf("target %s: resolve cwd: %w", path, err)
+		}
+		t.Cwd = abs
 	}
 	return t, nil
 }

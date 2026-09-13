@@ -88,7 +88,11 @@ func cmdRun(args []string) int {
 	}
 
 	fmt.Fprintf(os.Stdout, "\nrun %s\nresults %s\n\n", runID, resultDir)
-	if _, err := os.Stat(resultDir); err != nil {
+	// Keyed on runs.parquet, not on resultDir: Main creates the directory
+	// early, before the health wait, to put sut.log in it, so a run that
+	// failed fast still has a directory and would otherwise print an empty
+	// summary table instead of saying nothing was recorded.
+	if _, err := os.Stat(filepath.Join(resultDir, "runs.parquet")); err != nil {
 		fmt.Fprintln(os.Stderr, "harness: no results recorded (the suite never opened a sink)")
 		return code
 	}
