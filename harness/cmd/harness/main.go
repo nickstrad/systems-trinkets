@@ -82,7 +82,7 @@ func usage(w io.Writer) {
 usage: harness <command> [flags]
 
 commands:
-  run        run a suite against one target and report on it
+  run        run a suite against one or all targets and report
   report     print a canned query over recorded runs
   sql        run arbitrary DuckDB SQL over recorded runs
   new-suite  scaffold suites/<pattern>/{CONTRACT.md,INVARIANTS.md,<pattern>_test.go}
@@ -102,15 +102,17 @@ commands:
 }
 
 func usageRun(w io.Writer) {
-	fmt.Fprint(w, `harness run <pattern> (--target targets/x.toml | --url http://host:port) [flags] [-- go test flags]
+	fmt.Fprint(w, `harness run <pattern> (--target targets/x.toml | --url http://host:port | --all-targets) [flags] [-- go test flags]
 
+  --all-targets    run targets/<pattern>-*.toml sequentially in filename order
   --target FILE    target file; its pattern must match <pattern>
   --url URL        ad-hoc target, with --language, --engine, --label
   --sut-ref REF    git ref or version of the SUT, recorded on the run
 
   Runs `+"`go test ./suites/<pattern>/ -count=1 -v`"+` from the module root with
   HARNESS_RUN_ID pre-assigned, then prints the summary report for that run.
-  Its exit code is go test's.
+  A batch continues through failures and returns the first nonzero exit code.
+  Each target gets its own run ID and summary; single runs return go test's code.
 
   e.g. harness run counter --url http://127.0.0.1:8080 --language go --engine memory -- -run TestContract
 `)

@@ -50,9 +50,11 @@ in its §10c. This file is the operating procedure derived from its §8.
   Never use `net/http` directly in a suite.
 - Concurrency tests use `load.Closed` / `load.ClosedFor` so workers start
   behind a barrier and the `hx.Counter` tallies are correct.
-- After a load run, gate final-state invariants on `r.Conclusive(h)`: a
+- After an ordinary load run, gate final-state invariants on `r.Conclusive(h)`: a
   request that errored may or may not have been applied, so the test fails
-  as inconclusive rather than passing or failing by luck.
+  as inconclusive rather than passing or failing by luck. Crash tests instead
+  bound final state by all acknowledgements and ambiguous errors; their
+  deliberate transport errors must not go through this gate.
 - Don't compute latency percentiles in a suite; every request is a sample and
   `latency.sql` derives p50/p95/p99 from `samples_measured`. Record
   throughput and counts with `check.Metric` if you want them in `metrics`.
@@ -68,7 +70,7 @@ anything that records); note the API in test-plan.md §9.
 ## Quick reference
 
 ```
-go test ./...                                   # unit tests; suites skip without a target
+go test ./...                                   # unit tests + in-process counter; other suites may skip
 go run ./example-sut/cmd/counter --addr 127.0.0.1:8080 [--engine memory] [--bug lost-update|drop-reset|write-behind|slow]
 go run ./cmd/harness run counter --url http://127.0.0.1:8080 [--language go --engine memory --label "…"]
 go run ./cmd/harness report --run last [--query summary|latency|checks|compare|history]

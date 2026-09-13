@@ -91,8 +91,8 @@ HARNESS_URL=http://127.0.0.1:8080 HARNESS_LANGUAGE=go HARNESS_ENGINE=memory go t
 HARNESS_TARGET=targets/counter-go-memory.toml go test ./suites/counter/ -v
 ```
 
-Without `HARNESS_URL`/`HARNESS_TARGET` a suite skips, so `go test ./...`
-stays green. The reference SUT takes `--bug lost-update|drop-reset|write-behind|slow` to
+Without `HARNESS_URL`/`HARNESS_TARGET`, counter runs against its in-process
+memory reference; suites without an `InProcess` fallback skip. The reference SUT takes `--bug lost-update|drop-reset|write-behind|slow` to
 prove the suite catches broken implementations.
 
 ## Targets
@@ -110,7 +110,7 @@ url      = "http://127.0.0.1:8082"
 label    = "example-sut valkey (INCRBY)"
 cmd = ["go", "run", "./example-sut/cmd/counter", "--addr", "127.0.0.1:8082", "--engine", "valkey", "--dsn", "redis://127.0.0.1:6379/1"]
 cwd = ".."                     # relative to the target file → the module root
-[expect]                       # optional hard performance limits
+[expect]                       # reserved; thresholds are not enforced yet
 # p99_ms = 20
 ```
 
@@ -127,7 +127,19 @@ four can run at once:
 `harness run <pattern> --target targets/x.toml` starts the SUT from the file's
 `cmd` (and stops it afterwards); `harness run <pattern> --url http://...`
 talks to a server you started yourself and never manages a process.
-`harness targets` lists the available files.
+`harness targets` lists the available files. Once both backing stores are up,
+run and compare all four engines with:
+
+```
+go run ./cmd/harness run counter --all-targets
+go run ./cmd/harness report --query history --pattern counter
+```
+
+Batch runs validate `targets/counter-*.toml` before starting, then execute in
+filename order. Each target gets its own run ID, results, and summary. A
+failed target does not stop later targets; the command returns the first
+nonzero exit code. `run --all-targets counter` is also accepted. Go test flags
+after `--` apply to every target.
 
 ## Backing stores
 
@@ -172,7 +184,8 @@ Every run writes five Parquet tables under `results/runs/<run_id>/`: `runs`
 (one row per Go test/subtest — status, duration, error), `checks` (one row
 per invariant evaluation — invariant ID, ok, message, details), `samples`
 (one row per HTTP request — method, path, status, latency), and `metrics`
-(free-form recorded numbers — throughput, percentiles, ...).
+(free-form recorded numbers — throughput and counts). Percentiles are
+computed from samples by the SQL reports.
 
 `harness sql` registers these as views over `results/runs/*/` so you can
 query across every run with plain SQL, e.g. `select * from checks where not

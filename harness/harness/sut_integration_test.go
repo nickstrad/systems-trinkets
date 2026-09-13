@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -8,8 +9,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
+
+	"systems-trinkets/harness/results"
 )
 
 // freePort returns a loopback TCP port that is free at the moment of the
@@ -187,5 +191,128 @@ func TestMainRefusesWhenSomethingAlreadyAnswers(t *testing.T) {
 	}
 	if strings.Contains(out, "--- PASS: TestContract") {
 		t.Errorf("the suite ran against the stale answerer:\n%s", out)
+	}
+}
+
+// Signal the test binary itself, as a terminal interrupt does, both while
+// Main waits for health and while a slow suite is collecting results.
+func TestMainInterruptStopsSUTAndExports(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds and signals a child test binary")
+	}
+	bin := buildCounterBinary(t)
+	suite := filepath.Join(t.TempDir(), "counter.test")
+	build := exec.Command("go", "test", "-race", "-c", "-o", suite, "./suites/counter")
+	build.Dir = ModuleRoot()
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build suite: %v\n%s", err, out)
+	}
+	for _, stage := range []string{"health", "load"} {
+		t.Run(stage, func(t *testing.T) {
+			root := t.TempDir()
+			addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+			command := []string{bin, "--addr", addr, "--engine", "memory", "--bug", "slow"}
+			if stage == "health" {
+				// Keep a live process answering 503 throughout the health wait.
+				t.Setenv("SUT_TEST_UNHEALTHY_ADDR", addr)
+				command = []string{os.Args[0], "-test.run=TestUnhealthySUTHelper$"}
+			}
+			target := writeTarget(t, root, addr, command)
+			resultDir := filepath.Join(root, "results")
+			logPath := filepath.Join(root, "suite.log")
+			log, err := os.Create(logPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer log.Close()
+			child := exec.Command(suite, "-test.v", "-test.run=TestIncrementConcurrent$")
+			for _, kv := range os.Environ() {
+				if !strings.HasPrefix(kv, "HARNESS_") {
+					child.Env = append(child.Env, kv)
+				}
+			}
+			child.Env = append(child.Env, EnvTarget+"="+target, EnvResults+"="+resultDir, healthTimeoutEnv+"=30s")
+			child.Stdout, child.Stderr = log, log
+			if err := child.Start(); err != nil {
+				t.Fatal(err)
+			}
+			done := make(chan error, 1)
+			go func() { done <- child.Wait() }()
+			t.Cleanup(func() { _ = child.Process.Kill() })
+			marker := "started SUT pid"
+			if stage == "load" {
+				marker = "=== RUN   TestIncrementConcurrent"
+			}
+			deadline := time.Now().Add(20 * time.Second)
+			for {
+				out, _ := os.ReadFile(logPath)
+				if strings.Contains(string(out), marker) && (stage != "health" || !portFree(addr)) {
+					break
+				}
+				select {
+				case err := <-done:
+					t.Fatalf("child exited before %s: %v\n%s", stage, err, out)
+				default:
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("waiting for %s:\n%s", stage, out)
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			if err := child.Process.Signal(syscall.SIGINT); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case err := <-done:
+				if err == nil {
+					t.Error("interrupted child returned success")
+				}
+			case <-time.After(15 * time.Second):
+				t.Fatal("interrupted child did not exit")
+			}
+			out, _ := os.ReadFile(logPath)
+			if strings.Contains(string(out), "DATA RACE") {
+				t.Fatalf("signal race:\n%s", out)
+			}
+			if !strings.Contains(string(out), "exporting partial results") {
+				t.Fatalf("signal not handled:\n%s", out)
+			}
+			if !portFree(addr) {
+				t.Errorf("SUT still listening after interrupt: %s", addr)
+			}
+			if stage == "load" {
+				db, err := results.Query(context.Background(), root)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer db.Close()
+				var n int
+				if err := db.QueryRow("SELECT count(*) FROM runs").Scan(&n); err != nil || n != 1 {
+					t.Fatalf("partial run not exported: count=%d err=%v\n%s", n, err, out)
+				}
+			}
+		})
+	}
+}
+
+func TestUnhealthySUTHelper(t *testing.T) {
+	addr := os.Getenv("SUT_TEST_UNHEALTHY_ADDR")
+	if addr == "" {
+		t.Skip("subprocess helper")
+	}
+	t.Fatal(http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})))
+}
+
+func TestCrashSkipsExternalSUT(t *testing.T) {
+	if testing.Short() {
+		t.Skip("spawns a suite")
+	}
+	srv := fakeSUT(t)
+	out, err := childSuite(t, "TestCrashRestart$", EnvURL+"="+srv.URL,
+		EnvEngine+"=sqlite", EnvResults+"="+t.TempDir())
+	if err != nil || !strings.Contains(out, "--- SKIP: TestCrashRestart") {
+		t.Fatalf("external target must skip crash tests: %v\n%s", err, out)
 	}
 }

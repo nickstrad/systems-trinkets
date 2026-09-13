@@ -44,11 +44,13 @@ type Sink struct {
 	dir string
 	run RunRow
 
-	mu     sync.RWMutex // guards closed; held (read) while sending on ch
-	closed bool
-	ch     chan any
-	done   chan struct{}
-	errs   []error // collector-side append/flush errors, reported by Close
+	mu        sync.RWMutex // guards closed; held (read) while sending on ch
+	closed    bool
+	closeOnce sync.Once
+	closeErr  error
+	ch        chan any
+	done      chan struct{}
+	errs      []error // collector-side append/flush errors, reported by Close
 
 	db   *sql.DB
 	conn driver.Conn
@@ -169,13 +171,16 @@ func (s *Sink) collect() {
 
 // Close stops the collector, records the run row with FinishedAt=now and
 // exports every table to Parquet. Safe to call more than once; later calls
-// are no-ops. Rows recorded during Close are dropped.
+// wait for the same export and return its error. Rows recorded during Close
+// are dropped. This keeps concurrent normal/signal shutdown from exiting
+// the process while another caller is still exporting.
 func (s *Sink) Close(ctx context.Context) error {
+	s.closeOnce.Do(func() { s.closeErr = s.close(ctx) })
+	return s.closeErr
+}
+
+func (s *Sink) close(ctx context.Context) error {
 	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		return nil
-	}
 	s.closed = true
 	close(s.ch)
 	s.mu.Unlock()

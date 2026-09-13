@@ -34,9 +34,10 @@ var (
 	recorder results.Recorder = results.Discard
 	runID    string
 
-	sutMu   sync.Mutex // guards proc and sutSpec (Restart races Main's own exit paths)
-	proc    *sut.Proc  // non-nil once Main has started the SUT from Target.Cmd
-	sutSpec sut.Spec
+	sutMu    sync.Mutex // guards proc, sutSpec, sink publication, and stopping
+	proc     *sut.Proc  // non-nil once Main has started the SUT from Target.Cmd
+	sutSpec  sut.Spec
+	stopping bool
 )
 
 // Option configures Main.
@@ -120,9 +121,10 @@ func Main(m *testing.M, opts ...Option) int {
 
 	stopSUT := func() {
 		sutMu.Lock()
+		defer sutMu.Unlock()
 		p := proc
+		stopping = true
 		proc = nil
-		sutMu.Unlock()
 		if p != nil {
 			if err := p.Stop(5 * time.Second); err != nil {
 				fmt.Fprintln(os.Stderr, "harness: stop SUT:", err)
@@ -130,7 +132,9 @@ func Main(m *testing.M, opts ...Option) int {
 		}
 	}
 	closeSink := func() { // guards nil/already-closed sink so every exit path may call this
+		sutMu.Lock()
 		s := sink
+		sutMu.Unlock()
 		if s == nil {
 			return
 		}
@@ -186,12 +190,18 @@ func Main(m *testing.M, opts ...Option) int {
 			env = append(env, k+"="+v) // appended after os.Environ(): later wins
 		}
 		spec := sut.Spec{Cmd: t.Cmd, Dir: t.Cwd, Env: env, Stdout: sutLog, Stderr: sutLog}
+		// Publish the child under the same lock as signal-driven shutdown.
+		sutMu.Lock()
+		if stopping {
+			sutMu.Unlock()
+			return 130
+		}
 		p, err := sut.Start(spec)
 		if err != nil {
+			sutMu.Unlock()
 			fmt.Fprintln(os.Stderr, "harness:", err)
 			return 2
 		}
-		sutMu.Lock()
 		proc, sutSpec = p, spec
 		sutMu.Unlock()
 		startedProc = p
@@ -241,13 +251,20 @@ func Main(m *testing.M, opts ...Option) int {
 		TargetURL: t.URL, HarnessSHA: gitSHA(), SUTRef: os.Getenv(EnvSUTRef),
 		GoVersion: runtime.Version(), Host: host,
 	}
+	sutMu.Lock()
+	if stopping {
+		sutMu.Unlock()
+		return 130
+	}
 	s, err := results.Open(ctx, resultDir, run)
 	if err != nil {
+		sutMu.Unlock()
 		fmt.Fprintln(os.Stderr, "harness:", err)
 		stopSUT()
 		return 2
 	}
 	sink, recorder = s, s
+	sutMu.Unlock()
 
 	code := m.Run()
 	stopSUT() // before closeSink: the SUT is done producing results by the time the run is finalised

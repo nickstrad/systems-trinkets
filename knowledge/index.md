@@ -13,7 +13,8 @@ the linked design documents as the authority when they disagree.
   fields, CRUD semantics, and deletion/foreign-key behavior.
 - [HTTP invariant harness](harness.md) — the separate Go module: package
   contracts, results pipeline, harness-managed SUT lifecycle and crash tests,
-  the counter reference on four engines, traps, and what is still backlog.
+  the counter reference on four engines, batch runs, signal/export races, and
+  what is still backlog.
 
 The schema companion pages are maintained separately:
 [schema index](../docs/schema/index.html) and [schema ERD](../docs/schema/erd.html).

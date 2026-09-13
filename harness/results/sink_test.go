@@ -102,3 +102,31 @@ func TestNewRunIDSortable(t *testing.T) {
 		t.Errorf("unexpected format %q", a)
 	}
 }
+
+func TestConcurrentCloseWaitsForExport(t *testing.T) {
+	root := t.TempDir()
+	s, err := Open(context.Background(), filepath.Join(root, "run"), RunRow{RunID: "run"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range 10_000 {
+		s.Sample(SampleRow{RunID: "run", Seq: i, StartedAt: time.Now()})
+	}
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			if err := s.Close(context.Background()); err != nil {
+				t.Error(err)
+				return
+			}
+			// Each returning caller must observe completed export, even if
+			// another caller won the race to initiate it.
+			for _, table := range Tables {
+				if _, err := os.Stat(filepath.Join(root, "run", table+".parquet")); err != nil {
+					t.Error(err)
+				}
+			}
+		})
+	}
+	wg.Wait()
+}
