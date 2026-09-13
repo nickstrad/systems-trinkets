@@ -9,17 +9,22 @@ SQLite database so the notes stay as portable as the subject matter.
 - [cli/docs/trinkets-cli.md](cli/docs/trinkets-cli.md) — the `trinkets` CLI and its
   schema.
 - [cli/](cli/README.md) — the supporting metadata tool, its source and tests.
+- [examples/counter/](examples/counter/README.md) — standalone Go counter reference on four engines.
 - [harness/](harness/README.md) — HTTP invariant tests for pattern implementations.
 
 The active curriculum is an ordered catalog of 29 exercises, from atomic
 counters through partition rebalancing. `cli/seed_catalog.go` is the executable
 source of truth; the guide mirrors its contracts and Valkey/SQLite/PostgreSQL
-core sketches. The current harness has the counter concurrency suite; process
-restart and operation-history capabilities are planned, while independently
-failing multi-node support is deferred.
+core sketches. The current harness tests counter concurrency and crash/restart behavior.
+Operation-history checking is planned; independently failing multi-node support
+is deferred.
 
 The metadata tool, database, and CLI documentation are colocated in `cli/`.
 See [cli/README.md](cli/README.md) for its layout and full usage.
+
+When adding code or notes, follow the
+[readability conventions](knowledge/readability-conventions.md) for names,
+folder placement, and reading guides.
 
 ```sh
 cd cli

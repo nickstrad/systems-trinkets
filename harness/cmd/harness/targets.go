@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"systems-trinkets/harness/harness"
+	"systems-trinkets/harness/suitekit"
 )
 
 // cmdTargets lists targets/*.toml with the dimensions each one describes.
@@ -19,7 +19,7 @@ func cmdTargets(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	root := moduleDir(*dir, harness.Path("targets"))
+	root := moduleDir(*dir, suitekit.Path("targets"))
 
 	paths, err := filepath.Glob(filepath.Join(root, "*.toml")) // sorted
 	if err != nil {
@@ -27,14 +27,14 @@ func cmdTargets(args []string) int {
 		return 1
 	}
 	if len(paths) == 0 {
-		fmt.Fprintf(os.Stderr, "harness: no targets in %s — write one (see test-plan.md §5 \"Target file\")\n", root)
+		fmt.Fprintf(os.Stderr, "harness: no targets in %s — write one (see docs/architecture.md (Targets and process lifecycle))\n", root)
 		return 0
 	}
 
 	table := &Table{Cols: []string{"file", "pattern", "language", "engine", "url", "label"}}
 	for _, p := range paths {
 		name := filepath.Base(p)
-		t, err := harness.LoadTarget(p)
+		t, err := suitekit.LoadTarget(p)
 		if err != nil {
 			table.Rows = append(table.Rows, []any{name, "!", err.Error(), nil, nil, nil})
 			continue

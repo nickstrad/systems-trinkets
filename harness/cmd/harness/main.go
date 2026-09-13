@@ -3,7 +3,7 @@
 // reads, `report` and `sql` query the Parquet files every run leaves behind,
 // `new-suite` scaffolds a suite and `targets` lists the configured SUTs.
 //
-// See test-plan.md §9 for the command surface and §6 for the results tables.
+// See docs/architecture.md for the command surface and results tables.
 package main
 
 import (
@@ -85,7 +85,7 @@ commands:
   run        run a suite against one or all targets and report
   report     print a canned query over recorded runs
   sql        run arbitrary DuckDB SQL over recorded runs
-  new-suite  scaffold suites/<pattern>/{CONTRACT.md,INVARIANTS.md,<pattern>_test.go}
+  new-suite  scaffold a suite with contract/invariant docs and separate test files
   targets    list targets/*.toml
   help       this message
 
@@ -139,7 +139,8 @@ func usageSQL(w io.Writer) {
 func usageNewSuite(w io.Writer) {
 	fmt.Fprint(w, `harness new-suite <pattern> [--dir DIR]
 
-  Scaffolds CONTRACT.md, INVARIANTS.md and <pattern>_test.go. Never overwrites.
+  Scaffolds CONTRACT.md, INVARIANTS.md, main_test.go, contract_test.go,
+  and concurrency_test.go. Never overwrites.
 `)
 }
 

@@ -1,7 +1,7 @@
 # Counter — invariants
 
 Status: **01–05 agreed 2026-09-12; 06 (crash) retained under user-authorized correctness judgment 2026-09-12** — two "should" invariants (monotonic reads per client, no half-applied non-2xx) were dropped and can return as 07/08 later. Every `check.Invariant`
-in `counter_test.go` cites an ID from this table; a failure points back here
+in the suite’s `*_test.go` files cites an ID from this table; a failure points back here
 to the primitive that was supposed to guarantee it.
 
 Guide row: *"No increment is lost under concurrent writers."* Primitives:
@@ -15,9 +15,9 @@ PostgreSQL `BIGINT` + atomic `UPDATE … RETURNING`.
 | INV-COUNTER-03 | **Sequential correctness.** From one client: `incr` returns previous + delta; `GET` equals the last `incr` response; unknown counters read 0. | Application code (the contract) on top of the primitive. | contract | must | agreed |
 | INV-COUNTER-04 | **Reset and delete are complete and synchronous.** After `POST /_reset` returns 204, every counter reads 0 and a subsequent `incr` returns `delta`; after `DELETE /counters/{name}` returns 204, that name reads 0 and other names are unchanged. | `FLUSHALL` / `TRUNCATE` / file delete, `DEL` / `DELETE WHERE name=?`, run to completion before responding. | contract | must | agreed |
 | INV-COUNTER-05 | **Isolation between names.** Concurrent increments to counter A never change counter B; each name's final value equals its own 2xx increments. | Keying: one key/row per name. | concurrency | must | agreed |
-| INV-COUNTER-06 | **Acknowledged increments survive a crash.** After the SUT is killed (SIGKILL) and restarted mid-load, the final value is bounded by `all-2xx ≤ final ≤ all-2xx + errored`: every acknowledged increment survives, and no increment is acknowledged before it is committed. Count acknowledgements before and after restart. Requests that errored around the kill are ambiguous (applied or not), hence the bound. | Application discipline: respond only after the store's atomic write has returned; the store's own persistence (SQLite file, Valkey/PostgreSQL server processes, which survive a kill of the SUT). Not applicable to the memory engine, whose state *is* the process. | crash | must | accepted 2026-09-12 (user delegated correctness decision; see test-plan.md §0) |
+| INV-COUNTER-06 | **Acknowledged increments survive a crash.** After the SUT is killed (SIGKILL) and restarted mid-load, the final value is bounded by `all-2xx ≤ final ≤ all-2xx + errored`: every acknowledged increment survives, and no increment is acknowledged before it is committed. Count acknowledgements before and after restart. Requests that errored around the kill are ambiguous (applied or not), hence the bound. | Application discipline: respond only after the store's atomic write has returned; the store's own persistence (SQLite file, Valkey/PostgreSQL server processes, which survive a kill of the SUT). Not applicable to the memory engine, whose state *is* the process. | crash | must | accepted 2026-09-12 (user delegated correctness decision; see ../../docs/work-log.md) |
 
-Interview answers (§8 of test-plan.md), recorded so a future session knows why:
+Interview answers (docs/suite-authoring.md), recorded so a future session knows why:
 
 1. *Invariant to preserve:* no lost update (01); the value returned from an increment is the true post-increment value (02).
 2. *Primitive per engine:* Valkey `INCR`/`INCRBY` (single-threaded command); SQLite `UPDATE … SET v=v+? WHERE name=?` inside `BEGIN IMMEDIATE` (or an `INSERT … ON CONFLICT DO UPDATE … RETURNING`); PostgreSQL `INSERT … ON CONFLICT (name) DO UPDATE SET v = counters.v + EXCLUDED.v RETURNING v` (row lock).

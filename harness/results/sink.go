@@ -15,7 +15,7 @@ import (
 )
 
 // Tables lists every table a run exports, in a stable order. The report CLI
-// registers a view per table over results/runs/*/<table>.parquet.
+// registers a view per table over artifacts/runs/*/<table>.parquet.
 var Tables = []string{"runs", "tests", "checks", "samples", "metrics"}
 
 // DDL for the in-memory database. Column order matters: AppendRow arguments
@@ -225,7 +225,7 @@ func (s *Sink) closeDB() {
 }
 
 // Query opens a fresh in-memory DuckDB with a view per table over
-// <root>/*/<table>.parquet (root is typically results/runs), plus
+// <root>/*/<table>.parquet (root is typically artifacts/runs), plus
 // samples_measured: samples minus the PhaseSetup requests, which is what
 // latency reports should read. Callers close the returned DB. Tables with no
 // parquet file yet are skipped.

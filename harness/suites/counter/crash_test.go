@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"systems-trinkets/harness/check"
-	"systems-trinkets/harness/harness"
 	"systems-trinkets/harness/load"
+	"systems-trinkets/harness/suitekit"
 )
 
 // TestCrashRestart is the kind-3 test for INV-COUNTER-06: while workers
@@ -22,7 +22,7 @@ import (
 // shape on a fast and a slow engine. It needs a target the harness started
 // itself (cmd in the target file) and a store that outlives the process.
 func TestCrashRestart(t *testing.T) {
-	h := harness.New(t)
+	h := suitekit.New(t)
 	if !h.Restartable() {
 		t.Skip("INV-COUNTER-06 needs a target the harness starts itself (cmd in the target file)")
 	}

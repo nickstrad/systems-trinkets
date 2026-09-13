@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"systems-trinkets/harness/harness"
-	"systems-trinkets/harness/hx"
+	"systems-trinkets/harness/httpclient"
+	"systems-trinkets/harness/suitekit"
 )
 
 // maxErrs caps how many fn errors Result.Errs retains; FnErrors still counts
@@ -20,13 +20,13 @@ const maxErrs = 100
 // Worker is one goroutine's view of a load run.
 type Worker struct {
 	ID   int             // 0..workers-1
-	Ctx  context.Context // h.Ctx + hx.WithWorker(ID) + hx.WithCounter(shared counter); cancelled when the run ends
+	Ctx  context.Context // h.Ctx + httpclient.WithWorker(ID) + httpclient.WithCounter(shared counter); cancelled when the run ends
 	Iter int             // 0-based index of this fn call for this worker (samples.seq counts requests, which may differ)
 }
 
 // Result aggregates one Closed/ClosedFor call.
 type Result struct {
-	Total, OK2xx, Non2xx, Errors int // HTTP tallies from the hx.Counter installed in every worker ctx (Errors = transport errors)
+	Total, OK2xx, Non2xx, Errors int // HTTP tallies from the httpclient.Counter installed in every worker ctx (Errors = transport errors)
 	FnErrors                     int // number of non-nil errors returned by fn
 	Errs                         []error
 	Elapsed                      time.Duration // from barrier release until the last worker returned
@@ -36,7 +36,7 @@ type Result struct {
 // run: a request that errored may or may not have been applied, so any
 // transport or worker error fails the test as inconclusive rather than
 // letting an invariant pass or fail by luck.
-func (r Result) Conclusive(h *harness.H) bool {
+func (r Result) Conclusive(h *suitekit.H) bool {
 	h.T.Helper()
 	if r.Errors == 0 && r.FnErrors == 0 {
 		return true
@@ -52,22 +52,22 @@ func (r Result) Conclusive(h *harness.H) bool {
 // Closed runs `workers` goroutines, each calling fn iterationsPerWorker
 // times, all released together on a barrier (every goroutine is started and
 // parked before any runs fn). A worker stops early if its ctx is done.
-func Closed(h *harness.H, workers, iterationsPerWorker int, fn func(*Worker) error) Result {
+func Closed(h *suitekit.H, workers, iterationsPerWorker int, fn func(*Worker) error) Result {
 	return run(h, workers, iterationsPerWorker, 0, fn)
 }
 
 // ClosedFor is Closed but each worker loops until d has elapsed, counted
 // from the barrier release.
-func ClosedFor(h *harness.H, workers int, d time.Duration, fn func(*Worker) error) Result {
+func ClosedFor(h *suitekit.H, workers int, d time.Duration, fn func(*Worker) error) Result {
 	return run(h, workers, 0, d, fn)
 }
 
-// Phase runs fn with h.Ctx temporarily replaced by hx.WithPhase(h.Ctx, name),
+// Phase runs fn with h.Ctx temporarily replaced by httpclient.WithPhase(h.Ctx, name),
 // restoring it afterwards (also on panic). Not goroutine-safe: call from the
 // test goroutine only.
-func Phase(h *harness.H, name string, fn func()) {
+func Phase(h *suitekit.H, name string, fn func()) {
 	prev := h.Ctx
-	h.Ctx = hx.WithPhase(prev, name)
+	h.Ctx = httpclient.WithPhase(prev, name)
 	defer func() { h.Ctx = prev }()
 	fn()
 }
@@ -75,11 +75,11 @@ func Phase(h *harness.H, name string, fn func()) {
 // run is the barrier + fan-out shared by Closed (iters > 0) and ClosedFor
 // (d > 0). The run context is derived only after every worker is parked at
 // the barrier, so a ClosedFor deadline starts counting at release.
-func run(h *harness.H, workers, iters int, d time.Duration, fn func(*Worker) error) Result {
+func run(h *suitekit.H, workers, iters int, d time.Duration, fn func(*Worker) error) Result {
 	var ready sync.WaitGroup
 	ready.Add(workers)
 	release := make(chan struct{})
-	counter := &hx.Counter{}
+	counter := &httpclient.Counter{}
 
 	var (
 		mu       sync.Mutex
@@ -109,7 +109,7 @@ func run(h *harness.H, workers, iters int, d time.Duration, fn func(*Worker) err
 		wg.Go(func() {
 			ready.Done()
 			<-release
-			w := &Worker{ID: id, Ctx: hx.WithCounter(hx.WithWorker(runCtx, id), counter)}
+			w := &Worker{ID: id, Ctx: httpclient.WithCounter(httpclient.WithWorker(runCtx, id), counter)}
 			for ; (iters == 0 || w.Iter < iters) && w.Ctx.Err() == nil; w.Iter++ {
 				record(fn(w))
 			}

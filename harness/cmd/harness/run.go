@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"systems-trinkets/harness/harness"
 	"systems-trinkets/harness/results"
+	"systems-trinkets/harness/suitekit"
 )
 
 // runFlags describes the target a run is pointed at.
@@ -56,14 +56,14 @@ func cmdRun(args []string) int {
 		return 2
 	}
 
-	suiteDir := harness.Path("suites", pattern)
+	suiteDir := suitekit.Path("suites", pattern)
 	if _, err := os.Stat(suiteDir); err != nil {
 		fmt.Fprintf(os.Stderr, "harness run: no suite %s (%s); scaffold one with `harness new-suite %s`\n",
 			pattern, suiteDir, pattern)
 		return 2
 	}
 
-	targets, err := runTargets(f, pattern, harness.Path("targets"))
+	targets, err := runTargets(f, pattern, suitekit.Path("targets"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "harness run:", err)
 		return 2
@@ -121,17 +121,17 @@ func runTarget(f *runFlags, pattern string, testArgs []string) int {
 		return 2
 	}
 	runID := results.NewRunID()
-	runsDir := harness.RunsDir()
+	runsDir := suitekit.RunsDir()
 	resultDir := filepath.Join(runsDir, runID)
 	env = append(env,
-		harness.EnvRunID+"="+runID,
-		harness.EnvResults+"="+resultDir,
-		harness.EnvSUTRef+"="+f.sutRef,
+		suitekit.EnvRunID+"="+runID,
+		suitekit.EnvResults+"="+resultDir,
+		suitekit.EnvSUTRef+"="+f.sutRef,
 	)
 
 	goArgs := append([]string{"test", "./suites/" + pattern + "/", "-count=1", "-v"}, testArgs...)
 	cmd := exec.Command("go", goArgs...)
-	cmd.Dir = harness.ModuleRoot()
+	cmd.Dir = suitekit.ModuleRoot()
 	cmd.Env = runEnvironment(os.Environ(), env)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -163,7 +163,7 @@ func runTarget(f *runFlags, pattern string, testArgs []string) int {
 	return code
 }
 
-// targetEnv turns --target or --url into the variables harness.TargetFromEnv
+// targetEnv turns --target or --url into the variables suitekit.TargetFromEnv
 // reads. Exactly one of the two is required.
 func targetEnv(f *runFlags, pattern string) ([]string, error) {
 	switch {
@@ -174,16 +174,16 @@ func targetEnv(f *runFlags, pattern string) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve --target: %w", err)
 		}
-		t, err := harness.LoadTarget(path)
+		t, err := suitekit.LoadTarget(path)
 		if err != nil {
 			return nil, err
 		}
 		if t.Pattern != pattern {
 			return nil, fmt.Errorf("target %s is for pattern %q, not %q", f.target, t.Pattern, pattern)
 		}
-		return []string{harness.EnvTarget + "=" + path}, nil
+		return []string{suitekit.EnvTarget + "=" + path}, nil
 	case f.url != "":
-		return harness.TargetEnv(harness.Target{URL: f.url, Pattern: pattern, Language: f.language, Engine: f.engine, Label: f.label}), nil
+		return suitekit.TargetEnv(suitekit.Target{URL: f.url, Pattern: pattern, Language: f.language, Engine: f.engine, Label: f.label}), nil
 	default:
 		return nil, errors.New("need --target <file.toml> or --url <http://…>")
 	}
@@ -193,9 +193,9 @@ func targetEnv(f *runFlags, pattern string) ([]string, error) {
 // stale ad-hoc metadata from leaking into the selected run.
 func runEnvironment(parent, selected []string) []string {
 	keys := map[string]bool{}
-	for _, key := range []string{harness.EnvTarget, harness.EnvURL, harness.EnvPattern,
-		harness.EnvLanguage, harness.EnvEngine, harness.EnvLabel, harness.EnvRunID,
-		harness.EnvResults, harness.EnvSUTRef} {
+	for _, key := range []string{suitekit.EnvTarget, suitekit.EnvURL, suitekit.EnvPattern,
+		suitekit.EnvLanguage, suitekit.EnvEngine, suitekit.EnvLabel, suitekit.EnvRunID,
+		suitekit.EnvResults, suitekit.EnvSUTRef} {
 		keys[key] = true
 	}
 	env := make([]string, 0, len(parent)+len(selected))

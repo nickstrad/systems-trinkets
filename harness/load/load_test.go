@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"systems-trinkets/harness/harness"
-	"systems-trinkets/harness/hx"
+	"systems-trinkets/harness/httpclient"
+	"systems-trinkets/harness/suitekit"
 )
 
-func newH(t *testing.T) *harness.H {
-	return &harness.H{T: t, Ctx: context.Background()}
+func newH(t *testing.T) *suitekit.H {
+	return &suitekit.H{T: t, Ctx: context.Background()}
 }
 
 // TestClosedBarrier proves all workers are parked before any of them runs
@@ -101,16 +101,16 @@ func TestErrsCappedAt100(t *testing.T) {
 	}
 }
 
-// TestCounterShared proves every worker's ctx carries the same *hx.Counter,
+// TestCounterShared proves every worker's ctx carries the same *httpclient.Counter,
 // and that Result is built from it.
 func TestCounterShared(t *testing.T) {
 	h := newH(t)
 	const workers, iters = 4, 5
 
 	res := Closed(h, workers, iters, func(w *Worker) error {
-		c := hx.CounterFrom(w.Ctx)
+		c := httpclient.CounterFrom(w.Ctx)
 		if c == nil {
-			t.Fatal("hx.CounterFrom(w.Ctx) is nil")
+			t.Fatal("httpclient.CounterFrom(w.Ctx) is nil")
 		}
 		c.Total.Add(1)
 		c.OK2xx.Add(1)
@@ -161,7 +161,7 @@ func TestIterPerWorker(t *testing.T) {
 // promptly once h.Ctx is cancelled.
 func TestClosedStopsOnCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	h := &harness.H{T: t, Ctx: ctx}
+	h := &suitekit.H{T: t, Ctx: ctx}
 
 	go func() {
 		time.Sleep(30 * time.Millisecond)
@@ -208,7 +208,7 @@ func TestClosedForDuration(t *testing.T) {
 // h.Ctx is cancelled, not only on its own timeout.
 func TestClosedForStopsOnParentCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	h := &harness.H{T: t, Ctx: ctx}
+	h := &suitekit.H{T: t, Ctx: ctx}
 
 	go func() {
 		time.Sleep(30 * time.Millisecond)
@@ -230,19 +230,19 @@ func TestClosedForStopsOnParentCancel(t *testing.T) {
 func TestPhase(t *testing.T) {
 	h := newH(t)
 
-	if got := hx.PhaseFrom(h.Ctx); got != "" {
+	if got := httpclient.PhaseFrom(h.Ctx); got != "" {
 		t.Fatalf("phase before Phase() = %q, want \"\"", got)
 	}
 
 	var inside string
 	Phase(h, "warmup", func() {
-		inside = hx.PhaseFrom(h.Ctx)
+		inside = httpclient.PhaseFrom(h.Ctx)
 	})
 
 	if inside != "warmup" {
 		t.Fatalf("phase inside Phase() = %q, want %q", inside, "warmup")
 	}
-	if got := hx.PhaseFrom(h.Ctx); got != "" {
+	if got := httpclient.PhaseFrom(h.Ctx); got != "" {
 		t.Fatalf("phase after Phase() = %q, want \"\"", got)
 	}
 }
@@ -260,7 +260,7 @@ func TestPhaseRestoresOnPanic(t *testing.T) {
 		})
 	}()
 
-	if got := hx.PhaseFrom(h.Ctx); got != "" {
+	if got := httpclient.PhaseFrom(h.Ctx); got != "" {
 		t.Fatalf("phase after panicking Phase() = %q, want \"\"", got)
 	}
 }

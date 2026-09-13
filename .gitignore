@@ -41,5 +41,9 @@ go.work.sum
 /cli/cli
 
 # harness: run results (parquet) and built binaries (go build -o bin/… ./cmd/harness)
-/harness/results/runs/
+/harness/artifacts/
 /harness/bin/
+
+# standalone counter reference build output
+/examples/counter/bin/
+/examples/counter/counter

@@ -12,7 +12,7 @@ import (
 	"text/template"
 	"time"
 
-	"systems-trinkets/harness/harness"
+	"systems-trinkets/harness/suitekit"
 )
 
 //go:embed templates/*.tmpl
@@ -31,8 +31,8 @@ type suiteData struct {
 }
 
 // cmdNewSuite scaffolds suites/<pattern>/{CONTRACT.md,INVARIANTS.md,
-// <pattern>_test.go}. It never overwrites an existing file: the docs are
-// agreed with the user and hand-edited.
+// main_test.go,contract_test.go,concurrency_test.go}. It never overwrites
+// an existing file: the docs are agreed with the user and hand-edited.
 func cmdNewSuite(args []string) int {
 	fs := flag.NewFlagSet("new-suite", flag.ContinueOnError)
 	fs.Usage = func() { usageNewSuite(fs.Output()) }
@@ -51,7 +51,7 @@ func cmdNewSuite(args []string) int {
 		return 2
 	}
 
-	root := moduleDir(*dir, harness.Path("suites"))
+	root := moduleDir(*dir, suitekit.Path("suites"))
 	written, err := scaffoldSuite(filepath.Join(root, pattern), pattern)
 	for _, p := range written {
 		fmt.Println("wrote", p)
@@ -60,11 +60,11 @@ func cmdNewSuite(args []string) int {
 		fmt.Fprintln(os.Stderr, "harness new-suite:", err)
 		return 1
 	}
-	fmt.Printf("\nnext: agree CONTRACT.md and INVARIANTS.md with the user (test-plan.md §8), then write tests\n")
+	fmt.Printf("\nnext: agree CONTRACT.md and INVARIANTS.md with the user (docs/suite-authoring.md), then write tests\n")
 	return 0
 }
 
-// scaffoldSuite renders the three files into dir, returning the paths written
+// scaffoldSuite renders the five files into dir, returning the paths written
 // even when it stops on an error.
 func scaffoldSuite(dir, pattern string) ([]string, error) {
 	data := suiteData{
@@ -76,7 +76,9 @@ func scaffoldSuite(dir, pattern string) ([]string, error) {
 	files := []struct{ name, tmpl string }{
 		{"CONTRACT.md", "contract.md.tmpl"},
 		{"INVARIANTS.md", "invariants.md.tmpl"},
-		{pattern + "_test.go", "suite_test.go.tmpl"},
+		{"main_test.go", "main_test.go.tmpl"},
+		{"contract_test.go", "contract_test.go.tmpl"},
+		{"concurrency_test.go", "concurrency_test.go.tmpl"},
 	}
 	tmpls, err := template.ParseFS(templateFS, "templates/*.tmpl")
 	if err != nil {

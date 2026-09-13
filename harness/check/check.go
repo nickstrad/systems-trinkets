@@ -8,13 +8,13 @@ import (
 	"fmt"
 	"time"
 
-	"systems-trinkets/harness/harness"
 	"systems-trinkets/harness/results"
+	"systems-trinkets/harness/suitekit"
 )
 
 // Invariant records one evaluation of invariant id and fails the test if !ok.
 // details is free-form context for the report (got/want, counts, ids).
-func Invariant(h *harness.H, id string, ok bool, msg string, details map[string]any) {
+func Invariant(h *suitekit.H, id string, ok bool, msg string, details map[string]any) {
 	h.T.Helper()
 	c := h.Client
 	c.Rec.Check(results.CheckRow{
@@ -32,7 +32,7 @@ func Invariant(h *harness.H, id string, ok bool, msg string, details map[string]
 // then records the result as one check. Use it for "should hold once the
 // system settles" invariants (visibility after reset, expiry), never for
 // timing assertions.
-func Eventually(h *harness.H, id string, timeout time.Duration, cond func() (bool, map[string]any), msg string) {
+func Eventually(h *suitekit.H, id string, timeout time.Duration, cond func() (bool, map[string]any), msg string) {
 	h.T.Helper()
 	deadline := time.Now().Add(timeout)
 	for {
@@ -55,7 +55,7 @@ func Eventually(h *harness.H, id string, timeout time.Duration, cond func() (boo
 }
 
 // Metric records a number for reports; it never fails the test.
-func Metric(h *harness.H, name string, value float64, unit string, labels map[string]any) {
+func Metric(h *suitekit.H, name string, value float64, unit string, labels map[string]any) {
 	c := h.Client
 	c.Rec.Metric(results.MetricRow{
 		RunID: c.RunID, Test: c.Test, Name: name, Value: value, Unit: unit,

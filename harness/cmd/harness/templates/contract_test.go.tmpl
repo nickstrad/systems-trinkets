@@ -1,0 +1,23 @@
+// Suite for the {{.Pattern}} pattern. See CONTRACT.md and INVARIANTS.md.
+package {{.Package}}
+
+import (
+	"net/http"
+	"testing"
+
+	"systems-trinkets/harness/check"
+	"systems-trinkets/harness/suitekit"
+)
+
+// TestContract walks the sequential contract (kind 1). suitekit.New has already
+// reset the SUT and confirmed /healthz; add the pattern's own steps, one
+// check.Invariant per INVARIANTS.md row they probe.
+func TestContract(t *testing.T) {
+	h := suitekit.New(t)
+
+	// TODO: replace with the first real step of CONTRACT.md.
+	resp := h.Must(h.Get("/healthz", nil, nil))
+	check.Invariant(h, "INV-{{.InvPrefix}}-01", resp.Status == http.StatusOK,
+		"TODO: the guide-row invariant, stated as a check", map[string]any{"status": resp.Status})
+}
+

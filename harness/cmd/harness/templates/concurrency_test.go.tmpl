@@ -1,0 +1,34 @@
+// Suite for the {{.Pattern}} pattern. See CONTRACT.md and INVARIANTS.md.
+package {{.Package}}
+
+import (
+	"testing"
+
+	"systems-trinkets/harness/check"
+	"systems-trinkets/harness/suitekit"
+	"systems-trinkets/harness/load"
+)
+
+// TestConcurrent is the kind-2 shape: N workers released on a barrier, then
+// the invariant is checked on the final state — never on timing.
+func TestConcurrent(t *testing.T) {
+	h := suitekit.New(t)
+	const workers, perWorker = 32, 100
+
+	r := load.Closed(h, workers, perWorker, func(w *load.Worker) error {
+		// TODO: one write per iteration through h.Client with w.Ctx, e.g.
+		// _, err := h.Client.Post(w.Ctx, "/{{.Pattern}}/{id}", map[string]string{"id": "hot"}, nil, nil)
+		_, err := h.Client.Get(w.Ctx, "/healthz", nil, nil)
+		return err
+	})
+	if r.Elapsed > 0 {
+		check.Metric(h, "throughput", float64(r.Total)/r.Elapsed.Seconds(), "req/s", map[string]any{"workers": workers})
+	}
+	if !r.Conclusive(h) {
+		return
+	}
+
+	// TODO: read the final state and compare it with what the 2xx requests imply.
+	check.Invariant(h, "INV-{{.InvPrefix}}-01", r.OK2xx == r.Total,
+		"TODO: final state equals what the 2xx requests imply", map[string]any{"ok": r.OK2xx, "total": r.Total})
+}

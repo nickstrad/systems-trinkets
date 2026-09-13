@@ -1,6 +1,6 @@
 # Counter — HTTP contract
 
-Status: **agreed 2026-09-12** (drafted from the §8 interview; user added `DELETE`).
+Status: **agreed 2026-09-12** (drafted from the suite-authoring interview; user added `DELETE`).
 
 Every counter SUT — any language, any engine — implements this API. The
 harness only ever talks HTTP to it. A counter is a named 64-bit signed

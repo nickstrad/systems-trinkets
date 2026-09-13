@@ -12,11 +12,11 @@ import (
 	"slices"
 	"strings"
 
-	"systems-trinkets/harness/harness"
 	"systems-trinkets/harness/results"
+	"systems-trinkets/harness/suitekit"
 )
 
-// errNoRuns means results/runs holds no run directories yet; callers report it
+// errNoRuns means artifacts/runs holds no run directories yet; callers report it
 // as an empty state, not a failure.
 var errNoRuns = errors.New("no runs yet")
 
@@ -29,12 +29,12 @@ type outputFlags struct {
 func addOutputFlags(fs *flag.FlagSet) *outputFlags {
 	o := &outputFlags{}
 	fs.StringVar(&o.format, "format", "box", "output format: box|md|json")
-	fs.StringVar(&o.runsDir, "runs-dir", "", "directory holding run directories (default <module>/results/runs)")
+	fs.StringVar(&o.runsDir, "runs-dir", "", "directory holding run directories (default <module>/artifacts/runs)")
 	return o
 }
 
-// dir resolves --runs-dir, defaulting to <module root>/results/runs.
-func (o *outputFlags) dir() string { return moduleDir(o.runsDir, harness.RunsDir()) }
+// dir resolves --runs-dir, defaulting to <module root>/artifacts/runs.
+func (o *outputFlags) dir() string { return moduleDir(o.runsDir, suitekit.RunsDir()) }
 
 // moduleDir returns override when set, else the module-relative default.
 func moduleDir(override, def string) string {
@@ -204,7 +204,7 @@ func runIDs(runsDir string) ([]string, error) {
 }
 
 // queriesDir is where the SQL templates live.
-func queriesDir() string { return harness.Path("queries") }
+func queriesDir() string { return suitekit.Path("queries") }
 
 // queryNames lists the templates in queriesDir, for help and error text.
 func queryNames() []string {

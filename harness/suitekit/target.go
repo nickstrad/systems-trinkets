@@ -1,0 +1,125 @@
+package suitekit
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/BurntSushi/toml"
+)
+
+// Target is one concrete server under test, loaded from targets/<name>.toml
+// or synthesised from HARNESS_URL. When Cmd is set, Main starts it itself
+// (via package process) before waiting for /healthz, and H.Restartable is true.
+type Target struct {
+	Pattern  string             `toml:"pattern"`
+	Language string             `toml:"language"`
+	Engine   string             `toml:"engine"`
+	URL      string             `toml:"url"`
+	Label    string             `toml:"label"`
+	Cmd      []string           `toml:"cmd"` // optional: harness starts/stops/restarts the SUT itself
+	Cwd      string             `toml:"cwd"` // relative to the target file; resolved by LoadTarget
+	Env      map[string]string  `toml:"env"` // merged over os.Environ(); later (this) wins
+	Expect   map[string]float64 `toml:"expect"`
+}
+
+// Environment variables a suite's TestMain reads. cmd/harness sets them
+// (TargetEnv for the target ones); TargetFromEnv and Main read them.
+const (
+	EnvTarget   = "HARNESS_TARGET"   // path to a targets/*.toml file; wins over EnvURL
+	EnvURL      = "HARNESS_URL"      // ad-hoc target base URL
+	EnvPattern  = "HARNESS_PATTERN"  // with EnvURL; default: current directory name
+	EnvLanguage = "HARNESS_LANGUAGE" // with EnvURL; default "?"
+	EnvEngine   = "HARNESS_ENGINE"   // with EnvURL; default "?"
+	EnvLabel    = "HARNESS_LABEL"    // with EnvURL
+	EnvRunID    = "HARNESS_RUN_ID"   // pre-assigned run id; default results.NewRunID()
+	EnvResults  = "HARNESS_RESULTS"  // results directory; default RunsDir()/<run_id>
+	EnvSUTRef   = "HARNESS_SUT_REF"  // free-text SUT version, recorded on the run
+)
+
+// LoadTarget reads a targets/<name>.toml file. Cwd is resolved against the
+// target file's own directory, so `cwd = ".."` in targets/x.toml means the
+// harness module root, and an omitted cwd means targets/ itself — never the
+// working directory of whoever happens to run the suite.
+func LoadTarget(path string) (Target, error) {
+	var t Target
+	md, err := toml.DecodeFile(path, &t)
+	if err != nil {
+		return t, fmt.Errorf("target %s: %w", path, err)
+	}
+	if u := md.Undecoded(); len(u) > 0 {
+		return t, fmt.Errorf("target %s: unknown keys %v", path, u)
+	}
+	if t.URL == "" {
+		return t, fmt.Errorf("target %s: url is required", path)
+	}
+	if t.Pattern == "" {
+		return t, fmt.Errorf("target %s: pattern is required", path)
+	}
+	if !filepath.IsAbs(t.Cwd) {
+		abs, err := filepath.Abs(filepath.Join(filepath.Dir(path), t.Cwd)) // t.Cwd == "" → the target file's own directory
+		if err != nil {
+			return t, fmt.Errorf("target %s: resolve cwd: %w", path, err)
+		}
+		t.Cwd = abs
+	}
+	return t, nil
+}
+
+// TargetFromEnv builds the Target for this process from EnvTarget (the file
+// wins) or EnvURL plus the ad-hoc variables; with EnvURL the pattern defaults
+// to the current directory name, since go test runs with cwd = the suite
+// package. ok is false when neither variable is set, in which case suites skip.
+func TargetFromEnv() (t Target, ok bool, err error) {
+	if path := os.Getenv(EnvTarget); path != "" {
+		t, err = LoadTarget(path)
+		return t, err == nil, err
+	}
+	u := os.Getenv(EnvURL)
+	if u == "" {
+		return Target{}, false, nil
+	}
+	t = Target{
+		URL:      strings.TrimRight(u, "/"),
+		Pattern:  os.Getenv(EnvPattern),
+		Language: envOr(EnvLanguage, "?"),
+		Engine:   envOr(EnvEngine, "?"),
+		Label:    os.Getenv(EnvLabel),
+	}
+	if t.Pattern == "" {
+		wd, _ := os.Getwd()
+		t.Pattern = filepath.Base(wd)
+	}
+	return t, true, nil
+}
+
+// TargetEnv is the inverse of TargetFromEnv for an ad-hoc target: the
+// KEY=VALUE pairs that make a child go test see t. Empty fields are omitted
+// so TargetFromEnv applies its defaults.
+func TargetEnv(t Target) []string {
+	env := []string{EnvURL + "=" + t.URL, EnvPattern + "=" + t.Pattern}
+	for _, kv := range [][2]string{{EnvLanguage, t.Language}, {EnvEngine, t.Engine}, {EnvLabel, t.Label}} {
+		if kv[1] != "" {
+			env = append(env, kv[0]+"="+kv[1])
+		}
+	}
+	return env
+}
+
+func envOr(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
+}
+
+func envDuration(k string, def time.Duration) time.Duration {
+	if v := os.Getenv(k); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return def
+}

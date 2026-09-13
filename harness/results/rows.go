@@ -2,8 +2,8 @@
 // collects them in memory and exports them to Parquet at the end of a run.
 //
 // Rows are flat structs with UTC timestamps and JSON already marshalled to
-// strings, so the Parquet writer can be swapped (see test-plan.md §6) without
-// touching callers.
+// strings, so the Parquet writer can be swapped without touching callers.
+// See docs/architecture.md for the results pipeline design.
 package results
 
 import (
@@ -48,7 +48,7 @@ type CheckRow struct {
 	At          time.Time
 }
 
-// SampleRow is one HTTP request observed by the hx client.
+// SampleRow is one HTTP request observed by httpclient.
 type SampleRow struct {
 	RunID        string
 	Test         string
@@ -74,8 +74,8 @@ type MetricRow struct {
 	At         time.Time
 }
 
-// Recorder is what tests, hx and check write to. Sink implements it; Discard
-// and Buffer are for unit tests, so packages like hx never import DuckDB.
+// Recorder is what tests, httpclient and check write to. Sink implements it; Discard
+// and Buffer are for unit tests, so packages like httpclient never import DuckDB.
 type Recorder interface {
 	Test(TestRow)
 	Check(CheckRow)
@@ -106,7 +106,7 @@ func JSON(v any) string {
 	return string(b)
 }
 
-// PhaseSetup labels the samples harness.New makes while resetting and
+// PhaseSetup labels the samples suitekit.New makes while resetting and
 // health-checking the SUT. Query exposes samples_measured, which excludes it.
 const PhaseSetup = "setup"
 

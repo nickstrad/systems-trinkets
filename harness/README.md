@@ -1,8 +1,9 @@
 # harness
 
-`test-plan.md` in this directory is the source of truth for design decisions.
-Read it before changing anything here — this README is just the practical
-on-ramp.
+Start with the reading order below to study the code. The current design is
+in [docs/architecture.md](docs/architecture.md); the original plan and review
+history are preserved in [docs/work-log.md](docs/work-log.md). Future work
+is separate in [docs/backlog.md](docs/backlog.md).
 
 ## What this is
 
@@ -14,37 +15,64 @@ implements each pattern in several languages and against several engines
 same way over HTTP and records results so they can be compared with DuckDB
 instead of read off the terminal.
 
+## Reading order
+
+1. [Counter contract](suites/counter/CONTRACT.md) and
+   [invariants](suites/counter/INVARIANTS.md): what a correct server guarantees.
+2. [Contract tests](suites/counter/contract_test.go),
+   [concurrency tests](suites/counter/concurrency_test.go), then
+   [crash tests](suites/counter/crash_test.go): how those guarantees are checked.
+   [Setup](suites/counter/main_test.go) and [helpers](suites/counter/helpers_test.go)
+   support these tests.
+3. [Per-test context](suitekit/test_context.go) and
+   [suite lifecycle](suitekit/suite_lifecycle.go): how tests get a target,
+   client, and recorder. Follow `target.go`, `health.go`, `restart.go`, and
+   `paths.go` for each supporting responsibility.
+4. [HTTP client](httpclient/client.go), [load](load/load.go), and
+   [checks](check/check.go): requests, concurrent work, and invariant evaluation.
+5. [Process control](process/process.go), [result rows](results/rows.go),
+   [sink](results/sink.go), then [CLI](cmd/harness/main.go) and
+   [SQL reports](queries/): lifecycle and the recorded evidence.
+
 ## Layout
 
-```
+```text
 harness/
-  test-plan.md            design source of truth
-  AGENTS.md               working agreement for agents (interview, rules)
+  README.md               overview, study order, runnable commands
+  AGENTS.md               working agreement for agents
+  docs/
+    architecture.md       current design authority and package flow
+    suite-authoring.md    interview and new-suite procedure
+    backlog.md            conditional future features
+    work-log.md           work entries and archived plan/reviews
   go.mod                  module systems-trinkets/harness
-  harness/                glue: Main (TestMain), New(t) -> H, Target loading
-  cmd/harness/            CLI: run | report | sql | new-suite | targets
-  hx/                     HTTP client: JSON helpers, timeouts, path templates,
-                          every request recorded as a sample
-  load/                   concurrency: Closed (N workers), Barrier, Phases
-  check/                  invariant assertions -> check rows + t.Errorf
-  results/                Run/Test/Check/Sample/Metric row types, in-memory
-                          sink, flush to Parquet
-  suites/
-    counter/
-      CONTRACT.md
-      INVARIANTS.md
-      counter_test.go
-    fifo-queue/ ...       (planned)
-  targets/
-    counter-go-{memory,sqlite,valkey,postgres}.toml
-                          (one per engine of example-sut/cmd/counter)
-  infra/
-    valkey.compose.yml    postgres.compose.yml
-  queries/                *.sql report templates run with DuckDB
-  example-sut/            tiny Go reference server(s), with --bug flags that
-                          break invariants on purpose
-  results/                gitignored; results/runs/<run_id>/*.parquet
+  suitekit/               per-suite and per-test orchestration
+  httpclient/             JSON HTTP requests and sample recording
+  load/                   barrier-started workers and phase labels
+  check/                  invariant assertions and recorded metrics
+  process/                child process groups: start, kill, stop, reap
+  results/                source: row types, collector, Parquet export/query
+  cmd/harness/            run | report | sql | new-suite | targets
+  cmd/counter-fault/      deliberate-fault server for harness validation
+  internal/counterfault/  fault decorators and tests
+  suites/counter/
+    CONTRACT.md           HTTP protocol
+    INVARIANTS.md         named guarantees
+    main_test.go          suite setup and in-process fallback
+    helpers_test.go       shared helpers and helper unit tests
+    contract_test.go     sequential behavior
+    concurrency_test.go  concurrent correctness
+    crash_test.go        acknowledged writes across restart
+  targets/                counter-go-{memory,sqlite,valkey,postgres}.toml
+  infra/                  Valkey and PostgreSQL compose files
+  queries/                SQL report templates, read at runtime
+  artifacts/runs/         generated, ignored: <run_id>/*.parquet and sut.log
 ```
+
+The standalone reference service lives in [../examples/counter/](../examples/counter/README.md),
+with its own module, command, and private engine packages. The harness imports
+only its public HTTP/memory package for the in-process fallback, via a local
+`go.mod` replacement; configured targets launch its command over HTTP.
 
 ## Prerequisites
 
@@ -68,9 +96,9 @@ go run ./cmd/harness sql "select test, status from tests order by 1"
 
 Every `targets/*.toml` here carries a `cmd`, so `run` starts the reference SUT
 itself, waits for its `/healthz`, and stops it at the end — its output is in
-`results/runs/<run_id>/sut.log`. Do not also start one by hand; the second
+`artifacts/runs/<run_id>/sut.log`. Do not also start one by hand; the second
 process cannot bind the port. `run` executes `suites/counter` via `go test`
-and writes `results/runs/<run_id>/*.parquet`. Swap the target file for another
+and writes `artifacts/runs/<run_id>/*.parquet`. Swap the target file for another
 engine and `report --query history --pattern counter` puts the runs side by
 side.
 
@@ -78,7 +106,7 @@ For an implementation of your own — anything the harness should not start —
 run it yourself and point `--url` at it:
 
 ```
-go run ./example-sut/cmd/counter --addr 127.0.0.1:8082 --engine valkey &
+go -C ../examples/counter run ./cmd/counter --addr 127.0.0.1:8082 --engine valkey &
 go run ./cmd/harness run counter --url http://127.0.0.1:8082 --language go --engine valkey
 ```
 
@@ -92,8 +120,19 @@ HARNESS_TARGET=targets/counter-go-memory.toml go test ./suites/counter/ -v
 ```
 
 Without `HARNESS_URL`/`HARNESS_TARGET`, counter runs against its in-process
-memory reference; suites without an `InProcess` fallback skip. The reference SUT takes `--bug lost-update|drop-reset|write-behind|slow` to
-prove the suite catches broken implementations.
+memory reference; suites without an `InProcess` fallback skip. Deliberate faults live in this module, under `internal/counterfault` and
+`cmd/counter-fault`. The user's correct implementation has no bug flags and
+imports no harness code. To exercise a deliberate fault, from `harness/`:
+
+```sh
+go run ./cmd/counter-fault --engine memory --bug lost-update
+```
+
+Then point the suite at that server with `--url`. For crash-fault tests, create
+a target using `cmd = ["go", "run", "./cmd/counter-fault", "--engine", "sqlite",
+"--bug", "write-behind"]` and `cwd = ".."` when placed in `harness/targets/`;
+the harness must own the process to kill and restart it. The existing four
+targets continue to run the correct standalone command.
 
 ## Targets
 
@@ -107,9 +146,9 @@ pattern  = "counter"
 language = "go"
 engine   = "valkey"
 url      = "http://127.0.0.1:8082"
-label    = "example-sut valkey (INCRBY)"
-cmd = ["go", "run", "./example-sut/cmd/counter", "--addr", "127.0.0.1:8082", "--engine", "valkey", "--dsn", "redis://127.0.0.1:6379/1"]
-cwd = ".."                     # relative to the target file → the module root
+label    = "counter reference valkey (INCRBY)"
+cmd = ["go", "run", "./cmd/counter", "--addr", "127.0.0.1:8082", "--engine", "valkey", "--dsn", "redis://127.0.0.1:6379/1"]
+cwd = "../../examples/counter" # relative to the target file → counter module
 [expect]                       # reserved; thresholds are not enforced yet
 # p99_ms = 20
 ```
@@ -159,27 +198,14 @@ brought up once and left running while you iterate.
 
 ## Writing a new suite
 
-1. Read the pattern: `trinkets pattern show <slug>` and its row in
-   `docs/systems-patterns.md`.
-2. Interview with the user: what must hold, which primitive guarantees it,
-   what happens under concurrency, what happens on crash (kill + restart mid-load), how
-   retries/duplicates/ordering/expiration are handled, which guarantees are
-   store-provided vs application convention, and any performance
-   expectations.
-3. Write `CONTRACT.md` (endpoints, request/response shapes, error codes, plus
-   the required `GET /healthz` and `POST /_reset`) and `INVARIANTS.md` (ID,
-   statement, guaranteeing primitive, test kind, status) **before any test
-   code**, and agree them with the user.
-4. `harness new-suite <pattern>` scaffolds `suites/<pattern>/` from
-   templates. Write tests in order: contract/sequential, then concurrency
-   invariants, then performance metrics, then crash tests (`h.Restartable()` / `h.Restart()`; see `suites/counter/crash_test.go`).
-5. Run against `example-sut` first if one exists, then the real
-   implementation, and check with `harness report --run last`; record
-   lessons with `trinkets attempt add`.
+Follow [docs/suite-authoring.md](docs/suite-authoring.md) for the interview,
+contract agreement, and test-writing rules. `go run ./cmd/harness new-suite <pattern>` generates `CONTRACT.md`, `INVARIANTS.md`, `main_test.go`,
+`contract_test.go`, and `concurrency_test.go`. Add shared helpers and crash
+tests as the pattern requires them.
 
 ## Results
 
-Every run writes five Parquet tables under `results/runs/<run_id>/`: `runs`
+Every run writes five Parquet tables under `artifacts/runs/<run_id>/`: `runs`
 (one row per run — pattern, language, engine, target, timestamps), `tests`
 (one row per Go test/subtest — status, duration, error), `checks` (one row
 per invariant evaluation — invariant ID, ok, message, details), `samples`
@@ -187,7 +213,7 @@ per invariant evaluation — invariant ID, ok, message, details), `samples`
 (free-form recorded numbers — throughput and counts). Percentiles are
 computed from samples by the SQL reports.
 
-`harness sql` registers these as views over `results/runs/*/` so you can
+`harness sql` registers these as views over `artifacts/runs/*/` so you can
 query across every run with plain SQL, e.g. `select * from checks where not
 ok`. `recorded_at` is the timestamp column on `checks` and `metrics` rows —
 use it to compare runs over time or filter to a specific run's history.

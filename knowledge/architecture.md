@@ -1,8 +1,27 @@
 # Repository architecture
 
-## Two Go modules
+## Ownership: implementations versus harness
 
-The repository has two intentionally separate modules:
+The user builds correct implementation logic for each pattern. Reference and
+user projects (currently `examples/counter/`) should model that work: domain
+operations, storage primitives, HTTP endpoints, startup, and ordinary unit tests.
+The user is not expected to implement harness machinery or deliberately broken
+variants. Keep fault injection, load generation, invariant suites, process
+control, and result collection under `harness/`. Do not add bug-only methods or
+flags to a user's application to make the harness easier to test.
+
+For counter, `harness/internal/counterfault` and `harness/cmd/counter-fault`
+own the deliberate faults and their composition. The correct `Store` has no
+`Set` method and the user command has no `--bug` flag. The harness supplies
+its own overwrite adapter using the real store's operations. The application
+exposes a normal `store.Open` factory so both commands can select engines
+without duplicating driver logic or bypassing Go's `internal/` boundary.
+The agreed HTTP contract (including health and reset endpoints) is the
+integration boundary; application code does not import harness packages.
+
+## Three Go modules
+
+The repository has three intentionally separate modules:
 
 - `cli/` is the module `systems-trinkets/cli` (`cli/go.mod`). Its package is
   `main` and builds the `trinkets` metadata CLI. Its database dependency is SQLite through
@@ -11,8 +30,14 @@ The repository has two intentionally separate modules:
   owns the HTTP test toolkit and DuckDB/Parquet result path. Keeping its module
   boundary prevents harness dependencies from becoming CLI dependencies.
 
+- `examples/counter/` is the module `systems-trinkets/examples/counter`.
+  It owns the reference HTTP counter, its `cmd/counter` executable, private
+  engine adapters under `internal/store/`, and shared test helpers under
+  `internal/storetest/`. See [its reading guide](../examples/counter/README.md).
+
 There is no root Go module. From the repository root, use
-`go -C cli test ./...` and `go -C harness test ./...` to check each module
+`go -C cli test ./...`, `go -C harness test ./...`, and
+`go -C examples/counter test ./...` to check each module
 separately. Build the metadata tool with `go -C cli build -o bin/trinkets .`
 and run `./cli/bin/trinkets --db cli/trinkets.db matrix` from the repository
 root. The shared database and SQLite sidecars live in `cli/`; CLI docs live
@@ -70,7 +95,8 @@ The harness has working package code for HTTP, load shapes, checks, result
 collection, target loading, SUT process lifecycle (start/kill/restart/stop),
 a `run`/`report`/`sql`/`new-suite`/`targets` CLI, query templates, and the
 counter suite (including a crash test) with a Go reference implementation on
-memory, SQLite, Valkey and PostgreSQL. `harness/test-plan.md` is the design
-authority and work log; its §7 backlog items (open-loop load, performance
-thresholds, history/linearizability checking, further pattern suites) are
-plans, not current guarantees.
+memory, SQLite, Valkey and PostgreSQL. [Harness architecture](../harness/docs/architecture.md) is the current design
+authority. [The work log](../harness/docs/work-log.md) preserves prior decisions
+and reviews. Open-loop load, performance thresholds, history/linearizability
+checking, and further suites are conditional work in
+[the backlog](../harness/docs/backlog.md), not current guarantees.
