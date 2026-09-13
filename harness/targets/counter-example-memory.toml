@@ -1,8 +1,0 @@
-# The reference SUT: go run ./example-sut/cmd/counter --addr 127.0.0.1:8080
-pattern  = "counter"
-language = "go"
-engine   = "memory"
-url      = "http://127.0.0.1:8080"
-label    = "example-sut --bug none"
-# phase 2:
-# cmd = ["go", "run", "./example-sut/cmd/counter", "--addr", "127.0.0.1:8080"]

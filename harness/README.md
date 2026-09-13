@@ -36,7 +36,8 @@ harness/
       counter_test.go
     fifo-queue/ ...       (planned)
   targets/
-    counter-example-memory.toml   (points at example-sut/cmd/counter)
+    counter-go-{memory,sqlite,valkey,postgres}.toml
+                          (one per engine of example-sut/cmd/counter)
   infra/
     valkey.compose.yml    postgres.compose.yml
   queries/                *.sql report templates run with DuckDB
@@ -55,13 +56,30 @@ harness/
 
 ## Quick start
 
-Start a reference SUT, then run its suite:
+One engine end to end — start its backing store, run the suite, read the
+results:
 
 ```
-go run ./example-sut/cmd/counter --addr 127.0.0.1:8080 &      # reference SUT (--engine memory)
-go run ./cmd/harness run counter --url http://127.0.0.1:8080  # runs suites/counter via go test, writes results/runs/<run_id>/*.parquet
+docker compose -f infra/valkey.compose.yml up -d               # the backing store
+go run ./cmd/harness run counter --target targets/counter-go-valkey.toml
 go run ./cmd/harness report --run last
 go run ./cmd/harness sql "select test, status from tests order by 1"
+```
+
+Every `targets/*.toml` here carries a `cmd`, so `run` starts the reference SUT
+itself, waits for its `/healthz`, and stops it at the end — its output is in
+`results/runs/<run_id>/sut.log`. Do not also start one by hand; the second
+process cannot bind the port. `run` executes `suites/counter` via `go test`
+and writes `results/runs/<run_id>/*.parquet`. Swap the target file for another
+engine and `report --query history --pattern counter` puts the runs side by
+side.
+
+For an implementation of your own — anything the harness should not start —
+run it yourself and point `--url` at it:
+
+```
+go run ./example-sut/cmd/counter --addr 127.0.0.1:8082 --engine valkey &
+go run ./cmd/harness run counter --url http://127.0.0.1:8082 --language go --engine valkey
 ```
 
 Each suite is a normal Go test package, so you can also run it directly
@@ -70,7 +88,7 @@ without the CLI wrapper:
 ```
 HARNESS_URL=http://127.0.0.1:8080 HARNESS_LANGUAGE=go HARNESS_ENGINE=memory go test ./suites/counter/ -v
 # or, pointing at a target file instead of a bare URL:
-HARNESS_TARGET=targets/counter-example-memory.toml go test ./suites/counter/ -v
+HARNESS_TARGET=targets/counter-go-memory.toml go test ./suites/counter/ -v
 ```
 
 Without `HARNESS_URL`/`HARNESS_TARGET` a suite skips, so `go test ./...`
@@ -81,22 +99,35 @@ prove the suite catches broken implementations.
 
 A target file (`targets/<pattern>-<language>-<engine>.toml`) describes one
 concrete server under test: pattern, language, engine, URL, a free-text
-label, and (phase 2) a `cmd` to let the harness start/stop it itself. Example:
+label, and a `cmd`/`cwd` to let the harness start/stop it itself. Example:
 
 ```toml
 # targets/counter-go-valkey.toml
 pattern  = "counter"
 language = "go"
 engine   = "valkey"
-url      = "http://127.0.0.1:8080"
-label    = "v1 INCR"
+url      = "http://127.0.0.1:8082"
+label    = "example-sut valkey (INCRBY)"
+cmd = ["go", "run", "./example-sut/cmd/counter", "--addr", "127.0.0.1:8082", "--engine", "valkey", "--dsn", "redis://127.0.0.1:6379/1"]
+cwd = ".."                     # relative to the target file → the module root
 [expect]                       # optional hard performance limits
 # p99_ms = 20
 ```
 
-`harness run <pattern> --target targets/x.toml` and `harness run <pattern>
---url http://...` are equivalent ways to point at a target; `harness targets`
-lists the available files.
+The reference SUT ships one target per engine, on a port of its own so all
+four can run at once:
+
+| target | engine | port | `--dsn` default |
+| --- | --- | --- | --- |
+| `counter-go-memory.toml` | memory | 8080 | — (map + mutex) |
+| `counter-go-sqlite.toml` | sqlite | 8081 | `$TMPDIR/counter-sqlite-<addr>.db`, stable per port and logged at startup |
+| `counter-go-valkey.toml` | valkey | 8082 | `redis://127.0.0.1:6379/1` |
+| `counter-go-postgres.toml` | postgres | 8083 | `postgres://trinkets:trinkets@127.0.0.1:5432/trinkets?sslmode=disable` |
+
+`harness run <pattern> --target targets/x.toml` starts the SUT from the file's
+`cmd` (and stops it afterwards); `harness run <pattern> --url http://...`
+talks to a server you started yourself and never manages a process.
+`harness targets` lists the available files.
 
 ## Backing stores
 

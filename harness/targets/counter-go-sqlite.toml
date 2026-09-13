@@ -1,0 +1,10 @@
+# The reference SUT on SQLite. --dsn defaults to a stable file per listen
+# address ($TMPDIR/counter-sqlite-127.0.0.1-8081.db), so a restarted SUT sees
+# what the previous one committed; pass --dsn to choose the file.
+pattern  = "counter"
+language = "go"
+engine   = "sqlite"
+url      = "http://127.0.0.1:8081"
+label    = "example-sut sqlite (upsert … RETURNING, WAL)"
+cmd = ["go", "run", "./example-sut/cmd/counter", "--addr", "127.0.0.1:8081", "--engine", "sqlite"]
+cwd = ".."

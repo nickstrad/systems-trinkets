@@ -1,0 +1,8 @@
+# The reference SUT on Valkey: docker compose -f infra/valkey.compose.yml up -d
+pattern  = "counter"
+language = "go"
+engine   = "valkey"
+url      = "http://127.0.0.1:8082"
+label    = "example-sut valkey (INCRBY)"
+cmd = ["go", "run", "./example-sut/cmd/counter", "--addr", "127.0.0.1:8082", "--engine", "valkey", "--dsn", "redis://127.0.0.1:6379/1"]
+cwd = ".."

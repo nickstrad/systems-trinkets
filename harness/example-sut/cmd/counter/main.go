@@ -16,10 +16,15 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"systems-trinkets/harness/example-sut/counter"
+	"systems-trinkets/harness/example-sut/counter/store/postgres"
+	"systems-trinkets/harness/example-sut/counter/store/sqlite"
+	"systems-trinkets/harness/example-sut/counter/store/valkey"
 )
 
 func main() {
@@ -29,7 +34,7 @@ func main() {
 	bug := flag.String("bug", "none", "bug to inject: none|lost-update|drop-reset|write-behind|slow")
 	flag.Parse()
 
-	store, err := openStore(*engine, *dsn)
+	store, err := openStore(*engine, *dsn, *addr)
 	if err != nil {
 		log.Fatalf("counter: %v", err)
 	}
@@ -61,17 +66,49 @@ func main() {
 	}
 }
 
-// openStore picks the engine. Engines other than memory arrive with R2
-// (test-plan.md §10a); until then they are a clear error, not a fallback.
-func openStore(engine, dsn string) (counter.Store, error) {
+// Default DSNs per engine: the sqlite file comes from sqliteDSN, the others
+// are the infra/ compose services on their default ports.
+const (
+	defaultValkeyDSN   = "redis://127.0.0.1:6379/1"
+	defaultPostgresDSN = "postgres://trinkets:trinkets@127.0.0.1:5432/trinkets?sslmode=disable"
+)
+
+// openStore picks the engine, filling in that engine's default DSN when --dsn
+// is empty. Each engine is its own package, so this is the only place they are
+// linked in.
+func openStore(engine, dsn, addr string) (counter.Store, error) {
 	switch engine {
 	case "memory":
 		return counter.NewMemory(), nil
-	case "sqlite", "valkey", "postgres":
-		return nil, fmt.Errorf("--engine %s: not implemented yet (R2)", engine)
+	case "sqlite":
+		if dsn == "" {
+			dsn = sqliteDSN(addr)
+		}
+		log.Printf("sqlite dsn=%s", dsn)
+		return sqlite.Open(dsn)
+	case "valkey":
+		if dsn == "" {
+			dsn = defaultValkeyDSN
+		}
+		return valkey.Open(dsn)
+	case "postgres":
+		if dsn == "" {
+			dsn = defaultPostgresDSN
+		}
+		return postgres.Open(dsn)
 	default:
 		return nil, fmt.Errorf("unknown --engine %q", engine)
 	}
+}
+
+// sqliteDSN is the default SQLite file for a SUT on addr: one stable path per
+// listen address under the temp dir, created on first use and never deleted.
+// Stable is the point — a crash test restarts the same target and must find
+// the increments the killed process committed, so the path may not vary per
+// start; per-address keeps four engines' SUTs from sharing one file.
+func sqliteDSN(addr string) string {
+	safe := strings.NewReplacer(":", "-", "/", "-", string(filepath.Separator), "-").Replace(addr)
+	return filepath.Join(os.TempDir(), "counter-sqlite-"+safe+".db")
 }
 
 // withBug wraps s in the decorator named by bug.
