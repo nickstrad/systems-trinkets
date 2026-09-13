@@ -150,7 +150,7 @@ brought up once and left running while you iterate.
 1. Read the pattern: `trinkets pattern show <slug>` and its row in
    `docs/systems-patterns.md`.
 2. Interview with the user: what must hold, which primitive guarantees it,
-   what happens under concurrency, what happens on crash (phase 2), how
+   what happens under concurrency, what happens on crash (kill + restart mid-load), how
    retries/duplicates/ordering/expiration are handled, which guarantees are
    store-provided vs application convention, and any performance
    expectations.
@@ -160,7 +160,7 @@ brought up once and left running while you iterate.
    code**, and agree them with the user.
 4. `harness new-suite <pattern>` scaffolds `suites/<pattern>/` from
    templates. Write tests in order: contract/sequential, then concurrency
-   invariants, then performance metrics, then crash tests (phase 2).
+   invariants, then performance metrics, then crash tests (`h.Restartable()` / `h.Restart()`; see `suites/counter/crash_test.go`).
 5. Run against `example-sut` first if one exists, then the real
    implementation, and check with `harness report --run last`; record
    lessons with `trinkets attempt add`.

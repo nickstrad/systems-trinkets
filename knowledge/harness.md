@@ -1,63 +1,91 @@
 # HTTP invariant harness
 
 The harness is an independent Go module under `harness/`. It tests a server
-under test (SUT) over HTTP; it does not link to the SUT or talk directly to its
-Valkey/PostgreSQL backing store. The contract and invariant documents under
-`harness/suites/` define the protocol a language/engine implementation must
-provide.
+under test (SUT) over HTTP; it never links to the SUT and never talks to its
+backing store. The contract and invariant documents under `harness/suites/`
+define the protocol an implementation in any language, on any engine, must
+provide. `harness/test-plan.md` is the design authority and the work log; its
+§0 says where the work stands and its §9 is the as-built API. Read it before
+changing anything there.
 
 ## Current package flow
 
-`harness.Main` reads either `HARNESS_TARGET` (a TOML target file) or
-`HARNESS_URL` plus metadata environment variables, waits for `GET /healthz`,
-opens a results sink, runs the Go suite, and closes the sink. `harness.New`
-resets the SUT with `POST /_reset`, checks health again, binds an `hx.Client`,
-and registers cleanup that records the test row and flushes results.
+`harness.Main` (a suite's `TestMain`) reads `HARNESS_TARGET` (a TOML target
+file) or `HARNESS_URL` plus metadata variables. If the target file has a
+`cmd`, Main first refuses to run when something already answers at the
+target URL, then starts the SUT itself (package `sut`, process group of its
+own, output to `<results>/sut.log`), waits for `GET /healthz`, opens the
+results sink, runs the suite, stops the SUT, and exports. With
+`harness.InProcess(handler)` and no target in the environment, the suite runs
+against the handler on a loopback `httptest` server instead of skipping, so
+`go test ./...` exercises the counter suite; those in-process results are
+discarded unless `HARNESS_RESULTS` is set. `harness.New` resets the SUT with
+`POST /_reset`, checks health, binds an `hx.Client`, and registers cleanup
+that records the test row and flushes results.
 
-The implemented package responsibilities are:
+Package responsibilities:
 
 - `harness/hx`: JSON-aware HTTP requests, path-template escaping, per-request
-  timeout/header options, and exactly one `SampleRow` per call. A non-2xx HTTP
-  response is returned as a response (not a Go error); transport, timeout, and
-  decode failures are errors.
-- `harness/load`: barrier-started closed-loop workers (`Closed` and
-  `ClosedFor`) and phase labels. `ClosedFor` starts its timeout at barrier
-  release. `Phase` mutates the test handle and is explicitly not
-  goroutine-safe.
-- `harness/check`: records every invariant evaluation and fails the test on a
-  false result; `Eventually` is for eventual-state checks, not timing claims.
+  timeout options, and exactly one `SampleRow` per call. A non-2xx response
+  is a response, not an error; transport, timeout, and decode failures are.
+- `harness/load`: barrier-started closed-loop workers (`Closed`, `ClosedFor`)
+  and phase labels. `Result.Conclusive` fails the test if any request
+  errored, because a final-state invariant cannot be judged then.
+- `harness/check`: records every invariant evaluation and fails the test on
+  a false result; `Metric` records numbers that are reported, not asserted.
 - `harness/results`: flat run/test/check/sample/metric rows, a DuckDB-backed
-  sink, and Parquet export under `results/runs/<run_id>/`. One collector
-  goroutine owns the DuckDB appenders; callers submit rows through a channel.
-- `harness/example-sut/counter`: a small in-memory HTTP reference server with
-  deliberate `lost-update`, `drop-reset`, and `slow` modes. Its own Go tests
-  are not the same thing as a completed harness suite.
+  in-memory sink, Parquet export under `results/runs/<run_id>/`, and `Query`
+  views over every run. One collector goroutine owns the appenders.
+- `harness/sut`: start, kill (SIGKILL the process group, so a `go run`
+  grandchild's listener really closes), stop with grace, and exit
+  notification for one SUT process.
+- `harness/example-sut/counter`: the reference counter as a library — the
+  `Store` interface, `NewHandler` (the contract), the memory store, and bug
+  decorators `LostUpdate`, `DropReset`, `WriteBehind`, `Slow`, each breaking
+  one invariant. `StoreTest` is the conformance test every engine runs.
+  Engine stores live one package each under `store/{sqlite,valkey,postgres}`;
+  `example-sut/cmd/counter` is the binary (`--engine`, `--dsn`, `--bug`).
+
+## Targets and runs
+
+`harness/targets/counter-go-{memory,sqlite,valkey,postgres}.toml` each carry
+`cmd`/`cwd`, so `harness run counter --target <file>` starts and stops the SUT
+itself (ports 8080–8083); do not also start one by hand, the second cannot
+bind. `--url` is for a SUT you started yourself; crash tests skip there.
+Valkey and Postgres come from `harness/infra/*.compose.yml`. The sqlite
+default DSN is a stable file per listen address under the temp dir, so a
+restarted SUT reopens the same database.
+
+## Crash tests
+
+`suites/counter/crash_test.go` (INV-COUNTER-06) runs load in a goroutine,
+kills the SUT with `h.Restart()` from the test goroutine once a third of the
+increments are acknowledged, and checks a bound, `all 2xx ≤ final ≤ all 2xx +
+errored`, never a timing claim. It skips without `h.Restartable()` and on the
+memory engine (whose state is the process). `--bug write-behind` is the
+reference violation on every persistent engine.
 
 ## Development traps
 
-Every suite request should go through `hx`, or it will not be sampled. Every
-`check.Invariant` ID should come from that pattern's `INVARIANTS.md`, so the
-failure can be tied to the primitive under test. `harness.New` mutates the SUT
-by resetting it; use it only when the test owns that reset boundary.
+- Every suite request goes through `hx`, or it is not sampled; every
+  `check.Invariant` cites an ID from that suite's `INVARIANTS.md`.
+- A stale SUT on a target port makes a run test the wrong process; Main now
+  refuses in that case, but for `--url` runs check `lsof -nP -iTCP:<port>`
+  first. A test panic or `go test -timeout` leaves a harness-started SUT
+  running (nothing can stop it from the dying process); the next run's
+  refusal is how that surfaces.
+- Results are in-memory until `Close`; SIGINT exports partial results, a
+  panic does not.
+- A default the SUT computes at startup must be a pure function of its
+  flags, or a restart-based test silently breaks (the sqlite temp-file DSN
+  did exactly that before it was made stable).
+- `modernc.org/sqlite` applies pragmas per connection: pass them as
+  `_pragma=` DSN parameters, not `db.Exec`. Postgres's `ON CONFLICT DO
+  UPDATE` needs the table-qualified column (`counters.value`).
 
-Results are in-memory until `Close`; rows sent after close are dropped. Query
-views scan Parquet files with a run-directory glob and skip tables for which no
-Parquet file exists. Keep timestamps in UTC as the row types expect.
+## Not built
 
-## Implemented vs plan-only surface
-
-The source currently includes the core package code, the command entrypoint
-and `run`/`report`/`sql`/`new-suite`/`targets` subcommands, SQL templates,
-target parsing, and a counter contract/invariant/test suite. Inspect `targets/`
-for the available configurations; `counter-example-memory.toml` describes the
-in-memory reference counter. Recheck the current files before assuming a target
-or running service is available.
-
-`harness/test-plan.md` still describes the broader roadmap. The remaining
-phase-2/3 items include a FIFO suite, open-loop load, SUT process lifecycle and
-crash tests, operation-history/Porcupine checking, performance thresholds, and
-a future hand-off to `trinkets attempt`. (The current `history.sql` query is a
-run-history report; it is not the planned linearizability checker.) Target
-fields `cmd`, `cwd`, and `env` are already represented but are marked phase-2
-in the source and are not started by the current runner. Treat these as plans,
-not guarantees.
+Open-loop load (`load.Open`), `[expect]` thresholds, `--all-targets`, an
+on-disk DuckDB for crash-durable results, and Porcupine history checking are
+backlog items in `test-plan.md` §7, each tied to the pattern that first needs
+it.

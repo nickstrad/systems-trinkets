@@ -11,9 +11,9 @@ the linked design documents as the authority when they disagree.
 - [CLI, schema, and store pitfalls](cli-and-store.md) — SQLite constraints,
   migrations, curriculum reconciliation and read-only previews, JSON list
   fields, CRUD semantics, and deletion/foreign-key behavior.
-- [HTTP invariant harness](harness.md) — the separate Go module, current
-  package contracts, result pipeline, target lifecycle, and the pieces still
-  described only by the harness plan.
+- [HTTP invariant harness](harness.md) — the separate Go module: package
+  contracts, results pipeline, harness-managed SUT lifecycle and crash tests,
+  the counter reference on four engines, traps, and what is still backlog.
 
 The schema companion pages are maintained separately:
 [schema index](../docs/schema/index.html) and [schema ERD](../docs/schema/erd.html).

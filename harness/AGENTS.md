@@ -19,8 +19,8 @@ in its §10c. This file is the operating procedure derived from its §8.
    2. Which primitive provides each guarantee on each engine? (a failure
       points back here)
    3. What happens under concurrent access? (→ concurrency tests)
-   4. What happens if the process crashes between steps? (→ crash tests,
-      phase 2)
+   4. What happens if the process crashes between steps? (→ crash tests;
+      they need a target with `cmd`, see §4 kind 3 of the plan)
    5. How are retries, duplicates, ordering, expiration, recovery handled?
       (→ contract details: idempotency of endpoints, ack semantics, TTLs)
    6. Which guarantees come from the store vs from application convention?
@@ -33,7 +33,7 @@ in its §10c. This file is the operating procedure derived from its §8.
    primitive, kind, must/should, status). **Iterate with the user until
    both say "agreed" before writing test code.**
 4. Write tests in this order: contract/sequential → concurrency invariants →
-   performance metrics → crash (phase 2). Use `suites/counter/` as the model.
+   performance metrics → crash (needs `h.Restartable()`; skip otherwise). Use `suites/counter/` as the model.
 5. If the pattern has an `example-sut/<pattern>`, give it `--bug` modes that
    break each invariant on purpose and prove the suite catches them.
 6. Run: `go run ./cmd/harness run <pattern> --url http://…` (or

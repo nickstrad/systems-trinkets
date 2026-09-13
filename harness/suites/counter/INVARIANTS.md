@@ -24,7 +24,7 @@ Interview answers (§8 of test-plan.md), recorded so a future session knows why:
 3. *Concurrent access:* the test releases N goroutines on a barrier against one name (01, 02) and against several names (05).
 4. *Crash between steps:* INV-06 — a kill mid-`incr` must not leave a partially applied increment, and nothing acknowledged may be lost; on restart the value is bounded by the 2xx count before the kill and that count plus the in-flight (errored) requests. Tested only against targets the harness starts itself (`cmd` in the target file); skips otherwise, and on the memory engine. `--bug write-behind` is the reference violation.
 5. *Retries / duplicates:* out of scope for a plain counter — a retried `incr` counts twice by design. (Idempotent increments are the idempotency-key pattern.) *Expiration:* none in this contract (optional `EXPIRE` in the guide is not tested).
-6. *Store vs convention:* 01, 02, 05 come from the store primitive; 03, 04 are application convention. Monotonic reads per client depends on deployment (single node) and was left out of Phase 1.
+6. *Store vs convention:* 01, 02, 05 come from the store primitive; 03, 04 are application convention. Monotonic reads per client depends on deployment (single node) and was left out for now.
 7. *Performance:* record throughput (`incr/s`) and latency p50/p95/p99 per run under the concurrency test; no `[expect]` thresholds by default.
 
 Metrics recorded (not asserted): `incr_throughput` (req/s). Latency percentiles and error counts come from the `samples` table via `harness report --query latency`, not from the suite.

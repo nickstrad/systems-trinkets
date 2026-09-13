@@ -58,8 +58,10 @@ commands, and the root docs under `docs/`. The root `README.md` is the short
 on-ramp; `docs/trinkets-cli.md` describes the CLI surface.
 
 The harness has working package code for HTTP, load shapes, checks, result
-collection, target loading, a `run`/`report`/`sql`/`new-suite`/`targets` CLI,
-query templates, and a counter suite. `harness/test-plan.md` is still the
-design authority for work beyond that current surface; its phase-2/3 items
-(for example FIFO/crash suites, process lifecycle, open-loop load, and
-linearizability/history reporting) are plans, not current guarantees.
+collection, target loading, SUT process lifecycle (start/kill/restart/stop),
+a `run`/`report`/`sql`/`new-suite`/`targets` CLI, query templates, and the
+counter suite (including a crash test) with a Go reference implementation on
+memory, SQLite, Valkey and PostgreSQL. `harness/test-plan.md` is the design
+authority and work log; its §7 backlog items (open-loop load, performance
+thresholds, history/linearizability checking, further pattern suites) are
+plans, not current guarantees.
