@@ -1,5 +1,7 @@
 create table measurements as from 'measurements.csv';
 
+-- .print writes a line to stdout before the table that follows it.
+.print 'Per mode: did the counter count unique jobs or delivery attempts?'
 -- 1. Did the database count jobs or delivery attempts?
 -- actual_count is the total seen after the last delivery; it must equal the
 -- increments the client saw applied.
@@ -19,6 +21,7 @@ from measurements
 group by all
 order by all;
 
+.print 'Per mode and attempt number: deliveries that incremented vs duplicates ignored'
 -- 2. Which attempts actually changed the counter?
 select
   mode,
@@ -31,6 +34,7 @@ from measurements
 group by all
 order by all;
 
+.print 'Per mode, first delivery vs retry: client-observed transaction latency (p50, p95 in ms)'
 -- 3. Inspect client-observed transaction latency, not just SQL execution time.
 select
   mode,

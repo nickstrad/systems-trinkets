@@ -31,22 +31,12 @@ go.work.sum
 # .idea/
 # .vscode/
 
-# trinkets database and binary
-# *.db  (committed on purpose: small, shared across machines)
+# SQLite sidecars (*.db is committed on purpose: small, shared across machines)
 *.db-wal
 *.db-shm
-/trinkets
+
+# built binary (go build -o systems-trinkets ./lessons/<name>)
 /systems-trinkets
-/cli/bin/
-/cli/cli
-
-# harness: run results (parquet) and built binaries (go build -o bin/… ./cmd/harness)
-/harness/artifacts/
-/harness/bin/
-
-# standalone counter reference build output
-/examples/counter/bin/
-/examples/counter/counter
 
 # agent work logs (see trinkets-work-log skill)
 /.state/

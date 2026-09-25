@@ -29,7 +29,9 @@ abbreviate credentials, and never replace them with placeholders.
    where things live, gotchas, and verified commands. Follow `knowledge/AGENTS.md`
    and keep the index updated when you learn something reusable.
 2. Backing services live in `services/` (`services/index.md`); run them with
-   `make up-<service>` / `down-` / `clean-` from the repo root.
+   `make up-<service>` / `down-` / `clean-` from the repo root. Lessons run
+   with `make run-<lesson>` / `analyze-` / `lab-`; the repo is one Go module
+   with shared helpers in `internal/lab` (see `knowledge/go-modules.md`).
 3. For non-trivial work, use the `trinkets-work-log` skill: keep an event log in
    `.state/` (gitignored) so context can be cleared, then move lasting lessons
    into `knowledge/` and delete the log.

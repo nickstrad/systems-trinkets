@@ -2,7 +2,8 @@
 
 Applies when a lesson talks to the local Postgres with `github.com/jackc/pgx/v5`
 (see `lessons/completed-job-counter/main.go`). Connect with
-`postgres://trinkets:trinkets@localhost:5432/trinkets`.
+`pgx.Connect(ctx, lab.PostgresURL())`, which reads `DATABASE_URL` and defaults
+to `postgres://trinkets:trinkets@localhost:5432/trinkets`.
 
 - **First call includes statement preparation.** pgx's default mode prepares
   and caches each new SQL text on first use, so the first timed call of a code

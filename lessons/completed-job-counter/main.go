@@ -2,17 +2,16 @@ package main
 
 import (
 	"context"
-	"encoding/csv"
 	"fmt"
-	"os"
 	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/nickstrad/systems-trinkets/internal/lab"
 )
 
 const (
-	defaultDSN   = "postgres://trinkets:trinkets@localhost:5432/trinkets"
 	uniqueEvents = 100
 	deliveries   = 3
 )
@@ -38,7 +37,7 @@ var strategies = []strategy{
 			tag, err := tx.Exec(ctx, `
 			insert into job_seen(event_id) values ($1)
 			on conflict (event_id) do nothing`, id)
-			check(err)
+			lab.Check(err)
 			return tag.RowsAffected() == 1
 		},
 	},
@@ -48,13 +47,8 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
 
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		dsn = defaultDSN
-	}
-
-	db, err := pgx.Connect(ctx, dsn)
-	check(err)
+	db, err := pgx.Connect(ctx, lab.PostgresURL())
+	lab.Check(err)
 	defer db.Close(ctx)
 
 	_, err = db.Exec(ctx, `
@@ -66,7 +60,7 @@ func main() {
 			event_id integer primary key
 		);
 	`)
-	check(err)
+	lab.Check(err)
 
 	// Run each strategy once before measuring so pgx has already prepared its
 	// statements; otherwise the first timed row of each mode includes that work.
@@ -76,12 +70,9 @@ func main() {
 	}
 	reset(ctx, db)
 
-	file, err := os.Create("measurements.csv")
-	check(err)
-	out := csv.NewWriter(file)
-	check(out.Write([]string{
+	out := lab.NewMeasurements(
 		"mode", "event_id", "attempt", "applied", "observed_total", "latency_ms",
-	}))
+	)
 
 	for _, s := range strategies {
 		var total int
@@ -96,10 +87,7 @@ func main() {
 			panic(fmt.Sprintf("invariant failed: %s total is %d, want %d", s.name, total, s.wantTotal))
 		}
 	}
-	out.Flush()
-	check(out.Error())
-	check(file.Close())
-	fmt.Println("Wrote measurements.csv")
+	out.Close()
 }
 
 // reset empties both tables and seeds one counter row per strategy.
@@ -109,15 +97,15 @@ func reset(ctx context.Context, db *pgx.Conn) {
 		names[i] = s.name
 	}
 	_, err := db.Exec(ctx, `truncate job_counter, job_seen`)
-	check(err)
+	lab.Check(err)
 	_, err = db.Exec(ctx, `insert into job_counter(mode) select unnest($1::text[])`, names)
-	check(err)
+	lab.Check(err)
 }
 
 // deliver times one delivery of an event, records it as a CSV row, and
 // returns the counter total after it. A skipped delivery leaves the total at
 // prevTotal: this lab is the only writer.
-func deliver(ctx context.Context, db *pgx.Conn, out *csv.Writer, s strategy, id, attempt, prevTotal int) int {
+func deliver(ctx context.Context, db *pgx.Conn, out *lab.Measurements, s strategy, id, attempt, prevTotal int) int {
 	start := time.Now()
 	total, applied := apply(ctx, db, s, id)
 	elapsed := time.Since(start)
@@ -128,14 +116,14 @@ func deliver(ctx context.Context, db *pgx.Conn, out *csv.Writer, s strategy, id,
 	} else {
 		total = prevTotal
 	}
-	check(out.Write([]string{
+	out.Write(
 		s.name,
 		strconv.Itoa(id),
 		strconv.Itoa(attempt),
 		appliedCol,
 		strconv.Itoa(total),
-		strconv.FormatFloat(ms(elapsed), 'f', 3, 64),
-	}))
+		strconv.FormatFloat(lab.Ms(elapsed), 'f', 3, 64),
+	)
 	return total
 }
 
@@ -143,7 +131,7 @@ func deliver(ctx context.Context, db *pgx.Conn, out *csv.Writer, s strategy, id,
 // delivery, it increments the counter and returns the new total.
 func apply(ctx context.Context, db *pgx.Conn, s strategy, id int) (total int, applied bool) {
 	tx, err := db.Begin(ctx)
-	check(err)
+	lab.Check(err)
 	defer tx.Rollback(ctx)
 
 	if s.claim(ctx, tx, id) {
@@ -153,20 +141,10 @@ func apply(ctx context.Context, db *pgx.Conn, s strategy, id int) (total int, ap
 		if err == pgx.ErrNoRows {
 			panic("counter row is missing")
 		}
-		check(err)
+		lab.Check(err)
 		applied = true
 	}
 
-	check(tx.Commit(ctx))
+	lab.Check(tx.Commit(ctx))
 	return total, applied
-}
-
-func ms(d time.Duration) float64 {
-	return float64(d) / float64(time.Millisecond)
-}
-
-func check(err error) {
-	if err != nil {
-		panic(err) // Fail fast; never silently report database errors as success.
-	}
 }

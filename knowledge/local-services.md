@@ -14,6 +14,8 @@ Applies when running or adding a service under `services/` (see `services/index.
   prints "Nothing to be done". The root `Makefile` therefore generates explicit
   per-service rules with `define` + `$(foreach ... $(eval ...))`. Adding a
   service only needs a `compose_file_<name>` line and the name in `SERVICES`.
+  The per-lesson `run-`/`analyze-`/`lab-` rules use the same trick over
+  `$(wildcard lessons/*/)`.
 - **Docker daemon down.** `docker manifest inspect` can succeed while the daemon
   is stopped; `docker info` is the real check. Start Docker Desktop with
   `open -a Docker`.

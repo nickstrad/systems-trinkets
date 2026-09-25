@@ -16,5 +16,15 @@ Applies to a lesson's `analyze.sql`, run with `duckdb < analyze.sql` over the
 - **Latency:** `median(x)` for p50, `quantile_cont(x, 0.95)` for p95. Group by
   outcome (e.g. `mode, result`) so failed/timed-out samples do not mix with
   successful ones.
+- **Label each table:** put `.print 'What the next table shows'` before every
+  query. It is a DuckDB CLI dot command (works with `duckdb < analyze.sql`) and
+  prints a plain line, unlike `select '...' as log`, which prints a one-cell
+  table.
+- **Reuse an alias in the same `select`:** a later column may refer to an
+  earlier alias, e.g. `count(*) as total, count(*) filter (...) as hits,
+  round(100.0 * hits / total, 1) as hit_rate_pct`. No CTE is needed just to
+  name an aggregate once (`lessons/cache-aside/analyze.sql`).
 
 Verified 2026-09-24: both lessons' `analyze.sql` ran in DuckDB with these forms.
+Verified 2026-09-25: alias reuse ran in `lessons/cache-aside/analyze.sql`;
+`.print` labels ran in all three lessons' `analyze.sql`.

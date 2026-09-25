@@ -1,5 +1,7 @@
 create table measurements as from 'measurements.csv';
 
+-- .print writes a line to stdout before the table that follows it.
+.print 'Per journal mode and outcome: write latency (p50, max in ms) and trial counts'
 -- One row per mode and outcome, so writes that waited out busy_timeout and
 -- failed are never averaged with writes that succeeded.
 select
