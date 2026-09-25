@@ -15,6 +15,14 @@ user's code or lessons:
    and the user explicitly asks you to fix it. Approval to fix one issue does not
    cover the next one.
 
+## Credentials are not secret here
+
+Every service runs locally with fixed dev credentials (see `services/index.md`).
+Whenever you mention how to connect — in chat, docs, code, or error explanations —
+write the full connection string with username and password, e.g.
+`postgres://trinkets:trinkets@localhost:5432/trinkets`. Never redact or
+abbreviate credentials, and never replace them with placeholders.
+
 ## Start here
 
 1. Read `knowledge/index.md` first. `knowledge/` holds tips from earlier work:

@@ -1,79 +1,116 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/csv"
 	"fmt"
-	_ "modernc.org/sqlite"
 	"os"
+	"path/filepath"
+	"strconv"
 	"time"
-	"context"
+
+	_ "modernc.org/sqlite"
 )
 
-func main() {
-	out, _ := os.Create("measurements.csv")
-	defer out.Close()
+const trials = 3
 
-	csv := csv.NewWriter(out)
-	defer csv.Flush()
-	csv.Write([]string{"mode", "write_ms", "result"})
-
-	run("DELETE", csv)
-	run("WAL", csv)
+// measurement is one timed write made while a reader holds a snapshot open.
+type measurement struct {
+	writeMs float64
+	result  string
 }
 
-func run(mode string, results *csv.Writer) {
-	os.Remove("events.db")
-	db, _ := sql.Open("sqlite", "events.db")
+func main() {
+	file, err := os.Create("measurements.csv")
+	check(err)
+	results := csv.NewWriter(file)
+	check(results.Write([]string{"mode", "trial", "write_ms", "result"}))
 
+	for _, mode := range []string{"DELETE", "WAL"} {
+		for trial := 1; trial <= trials; trial++ {
+			m := run(mode, trial)
+			check(results.Write([]string{
+				mode,
+				strconv.Itoa(trial),
+				strconv.FormatFloat(m.writeMs, 'f', 2, 64),
+				m.result,
+			}))
+		}
+	}
+
+	results.Flush()
+	check(results.Error())
+	check(file.Close())
+}
+
+func run(mode string, trial int) measurement {
+	ctx := context.Background()
+
+	// A fresh directory per run keeps one run's -wal and -shm files from
+	// leaking into the next.
+	dir, err := os.MkdirTemp("", "wal-lab-")
+	check(err)
+	defer os.RemoveAll(dir)
+
+	// Pragmas in the DSN run on every connection the pool opens. With db.Exec
+	// they would reach only whichever pooled connection ran them.
+	dsn := "file:" + filepath.Join(dir, "events.db") +
+		"?_pragma=busy_timeout(2000)&_pragma=journal_mode(" + mode + ")"
+	db, err := sql.Open("sqlite", dsn)
+	check(err)
 	defer db.Close()
 
-	db.Exec("PRAGMA busy_timeout = 2000")
-	db.Exec("PRAGMA journal_mode = " + mode)
-
-	db.Exec(`
+	_, err = db.ExecContext(ctx, `
 create table events (
   id integer primary key,
   payload text
 );
+insert into events(payload) values ('seed');
 `)
+	check(err)
 
-	db.Exec(`insert into events(payload) values ('seed');`)
-
-	ctx := context.Background()
-	reader, _ := db.Conn(ctx)
+	reader, err := db.Conn(ctx)
+	check(err)
 	defer reader.Close()
 
-	tx, _ := reader.BeginTx(ctx, nil)
+	tx, err := reader.BeginTx(ctx, nil)
+	check(err)
+	defer tx.Rollback()
 
+	// The first read starts the snapshot; the transaction holds it until Rollback.
 	var count int
-	tx.QueryRow(`select count(*) from events;`).Scan(&count)
-	fmt.Printf("\n%s: reader snapshot open\n", mode)
+	check(tx.QueryRowContext(ctx, `select count(*) from events`).Scan(&count))
+	fmt.Printf("\n%s trial %d: reader snapshot open (%d rows)\n", mode, trial, count)
 
-	writer, _ := db.Conn(ctx)
-
+	writer, err := db.Conn(ctx)
+	check(err)
 	defer writer.Close()
+
+	// Preparing loads the schema and compiles the insert before the timer
+	// starts, so the timer measures only the lock wait and the write.
+	insert, err := writer.PrepareContext(ctx, `insert into events(payload) values ('new event')`)
+	check(err)
+	defer insert.Close()
+
 	start := time.Now()
-
-	_, err := writer.ExecContext(
-		nil,
-		`insert into events(payload) values ('new event')`,
-	)
-
+	_, err = insert.ExecContext(ctx)
 	elapsed := time.Since(start)
+	fmt.Printf("write took: %v\n", elapsed)
 
 	result := "ok"
-
 	if err != nil {
-		result = err.Error()
+		result = err.Error() // The measured outcome, not a lab failure.
 	}
+	return measurement{ms(elapsed), result}
+}
 
-	results.Write([]string{
-		mode,
-		fmt.Sprintf("%.2f", float64(elapsed.Microseconds())/1000),
-		result,
-	})
+func ms(d time.Duration) float64 {
+	return float64(d) / float64(time.Millisecond)
+}
 
-	fmt.Printf("write took: %v\n", elapsed)
-	tx.Rollback()
+func check(err error) {
+	if err != nil {
+		panic(err) // Fail fast; a setup error would make the timing meaningless.
+	}
 }

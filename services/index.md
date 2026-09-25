@@ -3,8 +3,8 @@
 | Service | Definition | Purpose | Connect |
 |---|---|---|---|
 | PostgreSQL 18 | `postgres.compose.yaml` | Relational store | `postgres://trinkets:trinkets@localhost:5432/trinkets` |
-| Valkey 9 | `valkey.compose.yaml` | Redis-compatible cache, queues, pub/sub | `redis://localhost:6379` |
-| SeaweedFS | `seaweedfs/` | S3-compatible object storage | `http://localhost:8333` |
+| Valkey 9 | `valkey.compose.yaml` | Redis-compatible cache, queues, pub/sub | `redis://localhost:6379` (no auth) |
+| SeaweedFS | `seaweedfs/` | S3-compatible object storage | `http://localhost:8333`, access key `trinkets`, secret key `trinkets-secret`, region `us-east-1`, path-style |
 
 ## Port conflicts
 

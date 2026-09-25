@@ -13,6 +13,9 @@ by its own Docker Compose file so a lesson can start only what it needs.
 - Bind ports to `127.0.0.1` only, and make each host port overridable with a
   `<SERVICE>_PORT`-style variable (`${POSTGRES_PORT:-5432}`); list it in `index.md`. Credentials are fixed dev values; never reuse
   them anywhere real.
+- The `Connect` column in `index.md` gives the full connection string, username
+  and password included (or says there is no auth). Always quote it that way;
+  never redact it.
 - Every service has a healthcheck so `make up-<service>` returns only when it is ready.
 - Adding a service: add its compose file, add a `compose_file_<service>` line and
   its name to `SERVICES` in the root `Makefile`, and add a row to `index.md`.
