@@ -1,0 +1,24 @@
+# PostgreSQL for lessons. Start with `make up-postgres` from the repo root.
+# Connect: postgres://trinkets:trinkets@localhost:5432/trinkets
+name: trinkets-postgres
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: trinkets
+      POSTGRES_PASSWORD: trinkets
+      POSTGRES_DB: trinkets
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # Postgres 18+ keeps PGDATA in a versioned subdirectory of this path.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trinkets -d trinkets"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  postgres-data:

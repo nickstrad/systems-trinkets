@@ -1,0 +1,3 @@
+mode,write_ms,result
+DELETE,0.26,database is locked (5) (SQLITE_BUSY)
+WAL,0.21,ok

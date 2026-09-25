@@ -1,0 +1,29 @@
+# SeaweedFS as an S3-compatible object store. Start with `make up-seaweedfs` from the repo root.
+# S3 endpoint: http://localhost:8333  (access key: trinkets, secret key: trinkets-secret)
+name: trinkets-seaweedfs
+
+services:
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    # One process runs master, volume, filer, and the S3 gateway.
+    command:
+      - server
+      - -dir=/data
+      - -ip.bind=0.0.0.0
+      - -s3
+      - -s3.config=/etc/seaweedfs/s3.json
+    ports:
+      - "127.0.0.1:${SEAWEEDFS_S3_PORT:-8333}:8333" # S3 API
+      - "127.0.0.1:${SEAWEEDFS_MASTER_PORT:-9333}:9333" # master UI
+      - "127.0.0.1:${SEAWEEDFS_FILER_PORT:-8888}:8888" # filer UI
+    volumes:
+      - seaweedfs-data:/data
+      - ./s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9333/cluster/status"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  seaweedfs-data:

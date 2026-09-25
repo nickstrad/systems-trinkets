@@ -1,0 +1,21 @@
+# Valkey (Redis-compatible) for lessons. Start with `make up-valkey` from the repo root.
+# Connect: redis://localhost:6379
+name: trinkets-valkey
+
+services:
+  valkey:
+    image: valkey/valkey:9
+    # Append-only file so data survives restarts until `make clean-valkey`.
+    command: ["valkey-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${VALKEY_PORT:-6379}:6379"
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  valkey-data:

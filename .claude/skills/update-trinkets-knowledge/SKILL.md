@@ -26,20 +26,15 @@ repository root, not from the skill directory.
 4. Create `knowledge/<topic>/` only when a writeup needs supporting artifacts
    such as a minimal reproduction or diagram. Put the explanation and artifact
    map in its `README.md`; keep artifacts minimal and reviewable. Link existing
-   repo documentation rather than copying it. Link the schema reference at
-   `cli/docs/schema/index.html` and `cli/docs/schema/erd.html` when relevant.
+   repo documentation rather than copying it.
 5. Update `knowledge/index.md` in the same change. List every top-level writeup
    other than the index itself, or each topic folder linked to its `README.md`,
    with a concise purpose. Keep each folder's README artifact map current.
    Correct or remove stale claims and broken links affected by the work.
 6. Verify factual claims against source and check relative links and index
    coverage. Run a safe focused reproduction when needed; use a temporary
-   database for CLI experiments. Report what knowledge changed and what evidence
+   database or scratch directory for experiments. Report what knowledge changed and what evidence
    supports it in the task handoff.
-
-For schema or migration changes, also follow `cli/docs/schema/AGENTS.md` and update
-both HTML pages. Keep prose explanations here focused on lessons and pitfalls
-rather than duplicating the column catalog.
 
 Keep updates within the active task's scope. This skill does not itself authorize
 committing, pushing, or changing application behavior. Edit the canonical skill

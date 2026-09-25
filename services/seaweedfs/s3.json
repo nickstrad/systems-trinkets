@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "trinkets",
+      "credentials": [
+        {
+          "accessKey": "trinkets",
+          "secretKey": "trinkets-secret"
+        }
+      ],
+      "actions": ["Admin", "Read", "List", "Tagging", "Write"]
+    }
+  ]
+}
