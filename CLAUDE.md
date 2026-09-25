@@ -34,4 +34,18 @@ abbreviate credentials, and never replace them with placeholders.
    `.state/` (gitignored) so context can be cleared, then move lasting lessons
    into `knowledge/` and delete the log.
 
+## Before you commit or finish
+
+Reflect before every commit and every final summary of a task: did this work
+find a gotcha, verify a command or behavior, or prove an earlier claim wrong
+(yours, a note's, or the code's)? Examples: a pragma that applies per
+connection, a driver behavior you tested, a measurement that was skewed.
+
+- **Yes:** run the `update-trinkets-knowledge` skill first, and put the
+  `knowledge/` change in the same commit as the work.
+- **No:** say so in one line in your summary ("knowledge: nothing new").
+
+Do this even when the task was a review, a cleanup (`/simplify`), or a commit
+request; those surface lessons too.
+
 Skills live in `.claude/skills/`; `.agents/skills/` holds symlinks for Codex.

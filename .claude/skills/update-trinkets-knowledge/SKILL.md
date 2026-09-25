@@ -1,6 +1,6 @@
 ---
 name: update-trinkets-knowledge
-description: This skill should be used when asked to "update-trinkets-knowledge", "record this lesson", or "update the knowledge store", and during systems-trinkets work after solving a non-obvious problem, verifying a reusable discovery, or changing behavior documented in knowledge/.
+description: This skill should be used when asked to "update-trinkets-knowledge", "record this lesson", or "update the knowledge store", and during systems-trinkets work after solving a non-obvious problem, verifying a reusable discovery, correcting an earlier claim, or changing behavior documented in knowledge/. Also check it before every commit and every final task summary in systems-trinkets.
 ---
 
 # Update trinkets knowledge
