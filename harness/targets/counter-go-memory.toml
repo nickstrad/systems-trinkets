@@ -1,8 +1,0 @@
-# The reference SUT on the in-process map store.
-pattern  = "counter"
-language = "go"
-engine   = "memory"
-url      = "http://127.0.0.1:8080"
-label    = "counter reference memory (map + mutex)"
-cmd = ["go", "run", "./cmd/counter", "--addr", "127.0.0.1:8080", "--engine", "memory"]
-cwd = "../../examples/counter"

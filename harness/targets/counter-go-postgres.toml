@@ -1,8 +1,0 @@
-# The reference SUT on PostgreSQL: docker compose -f infra/postgres.compose.yml up -d
-pattern  = "counter"
-language = "go"
-engine   = "postgres"
-url      = "http://127.0.0.1:8083"
-label    = "counter reference postgres (upsert … RETURNING)"
-cmd = ["go", "run", "./cmd/counter", "--addr", "127.0.0.1:8083", "--engine", "postgres", "--dsn", "postgres://trinkets:trinkets@127.0.0.1:5432/trinkets?sslmode=disable"]
-cwd = "../../examples/counter"
