@@ -9,3 +9,4 @@ See `AGENTS.md` for how to add items.
 | [sqlite-go.md](sqlite-go.md) | SQLite via modernc in Go: per-connection pragmas (use the DSN), WAL sidecar files, timing only the write |
 | [postgres-go.md](postgres-go.md) | pgx: first-call statement preparation skews timings, multi-statement Exec limits, `returning` |
 | [duckdb-analysis.md](duckdb-analysis.md) | `analyze.sql` idioms: loading CSVs, `group by all`, `arg_max`, `filter`, p50/p95 |
+| [agent-instructions.md](agent-instructions.md) | `AGENTS.md` holds instructions, `CLAUDE.md` imports it with `@AGENTS.md`; why no symlinks or `/config` setting |
