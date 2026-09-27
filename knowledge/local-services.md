@@ -15,7 +15,9 @@ Applies when running or adding a service under `services/` (see `services/index.
   per-service rules with `define` + `$(foreach ... $(eval ...))`. Adding a
   service only needs a `compose_file_<name>` line and the name in `SERVICES`.
   The per-lesson `run-`/`analyze-`/`lab-` rules use the same trick over
-  `$(wildcard lessons/*/)`.
+  `$(wildcard lessons/go/*/main.go)` and `$(wildcard lessons/deno/*/main.ts)`,
+  passing the runtime directory as a second argument so the rule picks
+  `go run .` or `deno run -A main.ts` without probing files per lesson.
 - **Docker daemon down.** `docker manifest inspect` can succeed while the daemon
   is stopped; `docker info` is the real check. Start Docker Desktop with
   `open -a Docker`.

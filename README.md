@@ -6,38 +6,54 @@ program, written in **Go** or **Deno** (TypeScript). The repo grows one lesson a
 
 ## Layout
 
-The repo is one Go module. Each lesson is a directory under `lessons/` with a
-`main.go` (or `main.ts`) that writes `measurements.csv`, and an `analyze.sql`
-that DuckDB runs over it. The few helpers every lesson needs (service URLs,
-fail-fast `Check`, the CSV writer) live in `internal/lab`.
+Lessons live under `lessons/<runtime>/<name>/`: Go lessons in `lessons/go/`,
+Deno lessons in `lessons/deno/`. Each lesson directory has a `main.go` or
+`main.ts` that writes `measurements.csv`, and an `analyze.sql` that DuckDB
+runs over it. The few helpers every lesson needs (service URLs with env
+overrides, the CSV writer) exist once per runtime with the same shape:
+
+| | Go | Deno |
+|---|---|---|
+| Toolchain root | `go.mod` (repo root, one module) | `lessons/deno/deno.json` (import map, one lockfile) |
+| Shared helpers | `internal/lab` (`lab.Env`, `lab.Check`, `lab.NewMeasurements`) | `lessons/deno/lab/lab.ts` (`env`, `Measurements`) |
+| Postgres | `internal/lab/postgres` (`postgres.Connect`) | `lab/postgres.ts` (`postgres.connect`) |
+| Valkey | `internal/lab/valkey` (`valkey.Connect`) | `lab/valkey.ts` (`valkey.connect`) |
+| SeaweedFS (S3) | not yet needed by a Go lesson | `lab/seaweedfs.ts` (`connect`, `ensureBucket`, `listKeys`, `deleteKeys`) |
+
+A new lesson is a new directory under `lessons/go/` or `lessons/deno/` with
+its entry file and `analyze.sql`; the Makefile discovers it, so no Makefile
+edit is needed.
 
 ## Running a lesson
 
 Every `make` command runs from the repo root. A lesson's name is its directory
-name under `lessons/`; `make help` lists them.
+name under `lessons/go/` or `lessons/deno/`; `make help` lists them.
 
 ```sh
 make help                        # lists lessons and services
 make up-postgres up-valkey       # start the services this lesson needs
 make lab-cache-aside             # run the lesson, then analyze its measurements
+make check                       # go vet ./... and deno check, for every lesson
 ```
 
 The three per-lesson targets, using `cache-aside` as the example:
 
 | Command | What it does |
 |---|---|
-| `make run-cache-aside` | `cd lessons/cache-aside && go run .` (or `deno run -A main.ts` if the lesson has a `main.ts`). Prints progress and writes `lessons/cache-aside/measurements.csv`. |
-| `make analyze-cache-aside` | `cd lessons/cache-aside && duckdb < analyze.sql`. Loads that CSV into DuckDB and prints one labelled table per query. Needs a `measurements.csv` from an earlier run. |
+| `make run-cache-aside` | `cd lessons/go/cache-aside && go run .` (a Deno lesson runs `deno run -A main.ts` from `lessons/deno/<name>`). Prints progress and writes `measurements.csv` in that directory. |
+| `make analyze-cache-aside` | `cd lessons/go/cache-aside && duckdb < analyze.sql`. Loads that CSV into DuckDB and prints one labelled table per query. Needs a `measurements.csv` from an earlier run. |
 | `make lab-cache-aside` | `run-` then `analyze-`, so one command gives fresh numbers. |
 
-The Makefile discovers lessons with a wildcard, so a new directory under
-`lessons/` gets these three targets with no Makefile edit.
+The Makefile discovers lessons with a wildcard over `lessons/go/*/main.go`
+and `lessons/deno/*/main.ts`, so a new lesson directory gets these three
+targets with no Makefile edit.
 
-Each lesson's `main.go` says which services it needs; start them first with the
-commands below. Lessons connect with the local dev credentials by default
+Each lesson's entry file says which services it needs; start them first with
+the commands below. Lessons connect with the local dev credentials by default
 (`postgres://trinkets:trinkets@localhost:5432/trinkets`,
-`redis://localhost:6379`). To point a lesson elsewhere, set `DATABASE_URL` or
-`CACHE_URL`, for example:
+`redis://localhost:6379`, S3 at `http://localhost:8333` with access key
+`trinkets` and secret key `trinkets-secret`). To point a lesson elsewhere, set
+`DATABASE_URL`, `CACHE_URL`, or `OBJECT_STORE_URL`, for example:
 
 ```sh
 DATABASE_URL=postgres://trinkets:trinkets@localhost:15432/trinkets make run-cache-aside

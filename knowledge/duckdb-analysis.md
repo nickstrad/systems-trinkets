@@ -1,7 +1,7 @@
 # DuckDB analysis scripts: idioms
 
 Applies to a lesson's `analyze.sql`, run with `duckdb < analyze.sql` over the
-`measurements.csv` its `main.go` writes (see `lessons/*/analyze.sql`).
+`measurements.csv` its `main.go` or `main.ts` writes (see `lessons/*/*/analyze.sql`).
 
 - **Load:** `create table measurements as from 'measurements.csv';` DuckDB
   detects the header and types. The script runs in memory, so `or replace` is
@@ -23,16 +23,18 @@ Applies to a lesson's `analyze.sql`, run with `duckdb < analyze.sql` over the
 - **Reuse an alias in the same `select`:** a later column may refer to an
   earlier alias, e.g. `count(*) as total, count(*) filter (...) as hits,
   round(100.0 * hits / total, 1) as hit_rate_pct`. No CTE is needed just to
-  name an aggregate once (`lessons/cache-aside/analyze.sql`).
+  name an aggregate once (`lessons/go/cache-aside/analyze.sql`).
 
 Verified 2026-09-24: both lessons' `analyze.sql` ran in DuckDB with these forms.
 - **Compare two named groups in one row:** `avg(x) filter (where mode = 'a')
   as a_ms, avg(x) filter (where mode = 'b') as b_ms, round(a_ms / b_ms, 1)`.
   Naming the groups keeps the ratio meaning a/b; `max(avg) / min(avg)` over a
   CTE only means that while `a` happens to be the slower one
-  (`lessons/background-job-queue/analyze.sql`).
+  (`lessons/go/background-job-queue/analyze.sql`).
 
-Verified 2026-09-25: alias reuse ran in `lessons/cache-aside/analyze.sql`;
+Verified 2026-09-25: alias reuse ran in `lessons/go/cache-aside/analyze.sql`;
 `.print` labels ran in all three lessons' `analyze.sql`.
 Verified 2026-09-26: the named-group ratio ran in
-`lessons/background-job-queue/analyze.sql` via `make analyze-background-job-queue`.
+`lessons/go/background-job-queue/analyze.sql` via `make analyze-background-job-queue`.
+Verified 2026-09-27: the named-group ratio and `.print` labels ran in the
+first Deno lesson, `lessons/deno/cross-store-failure/analyze.sql`.

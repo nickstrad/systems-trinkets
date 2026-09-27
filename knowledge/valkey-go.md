@@ -1,7 +1,7 @@
 # Valkey from Go (go-redis): gotchas
 
 Applies when a lesson talks to the local Valkey with
-`github.com/redis/go-redis/v9` (see `lessons/cache-aside/main.go`). The
+`github.com/redis/go-redis/v9` (see `lessons/go/cache-aside/main.go`). The
 documented connection string is `redis://localhost:6379` (no auth), from
 `services/index.md`.
 
@@ -19,5 +19,5 @@ documented connection string is `redis://localhost:6379` (no auth), from
   must agree on the key format; a hand-copied literal in setup silently stops
   invalidating when the format changes.
 
-Verified 2026-09-25: `lessons/cache-aside` ran end to end with `ParseURL` and
+Verified 2026-09-25: `lessons/go/cache-aside` ran end to end with `ParseURL` and
 the default URL against `make up-valkey`.

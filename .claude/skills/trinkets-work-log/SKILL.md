@@ -38,7 +38,7 @@ coordinator and no other agent is writing.
 ### 2026-09-24 14:05 [coordinator] decision
 Store lesson results in Postgres; analyze exported runs with DuckDB.
 ### 2026-09-24 14:12 [sub:builder] command
-`go test -race ./...` -> PASS (3 packages). Changed: lessons/example/main.go.
+`go test -race ./...` -> PASS (3 packages). Changed: lessons/go/example/main.go.
 ### 2026-09-24 14:20 [coordinator] next
 Dispatch reviewer; blocker: none.
 ```

@@ -1,0 +1,3 @@
+phase,object_count,metadata_count,orphan_count,reconcile_ms
+before_reconcile,20,16,4,0
+after_reconcile,16,16,0,2.063

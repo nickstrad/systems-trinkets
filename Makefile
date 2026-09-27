@@ -8,11 +8,14 @@
 #   make clean-<service>  stop and delete containers and data volumes
 #   make logs-<service>   follow logs
 #   make ps               show running trinkets services
+#   make check            compile-check every lesson: go vet ./... and deno check
 #
 # Services: postgres, valkey, seaweedfs (see services/index.md)
 
-SERVICES := postgres valkey seaweedfs
-LESSONS  := $(patsubst lessons/%/,%,$(wildcard lessons/*/))
+SERVICES     := postgres valkey seaweedfs
+GO_LESSONS   := $(patsubst lessons/go/%/main.go,%,$(wildcard lessons/go/*/main.go))
+DENO_LESSONS := $(patsubst lessons/deno/%/main.ts,%,$(wildcard lessons/deno/*/main.ts))
+LESSONS      := $(GO_LESSONS) $(DENO_LESSONS)
 
 compose_file_postgres  := services/postgres.compose.yaml
 compose_file_valkey    := services/valkey.compose.yaml
@@ -20,7 +23,7 @@ compose_file_seaweedfs := services/seaweedfs/compose.yaml
 
 compose = docker compose -f $(compose_file_$(1))
 
-.PHONY: help ps
+.PHONY: help ps check
 
 help:
 	@sed -n 's/^#   /  /p' Makefile
@@ -28,18 +31,27 @@ help:
 	@echo "  services: $(SERVICES)"
 
 # Explicit per-lesson rules, for the same reason as the service rules below.
-# A lesson is a directory under lessons/ with a main.go (or main.ts for Deno)
-# and an analyze.sql; both run from inside that directory.
+# A lesson is lessons/go/<name>/main.go or lessons/deno/<name>/main.ts plus an
+# analyze.sql; the directory picks the runtime. Both run from inside that
+# directory because measurements.csv and analyze.sql use relative paths.
+run_go   := go run .
+run_deno := deno run -A main.ts
+
 define lesson_rules
 .PHONY: run-$(1) analyze-$(1) lab-$(1)
 run-$(1):
-	cd lessons/$(1) && $(if $(wildcard lessons/$(1)/main.ts),deno run -A main.ts,go run .)
+	cd lessons/$(2)/$(1) && $(run_$(2))
 analyze-$(1):
-	cd lessons/$(1) && duckdb < analyze.sql
+	cd lessons/$(2)/$(1) && duckdb < analyze.sql
 lab-$(1): run-$(1) analyze-$(1)
 endef
 
-$(foreach l,$(LESSONS),$(eval $(call lesson_rules,$(l))))
+$(foreach l,$(GO_LESSONS),$(eval $(call lesson_rules,$(l),go)))
+$(foreach l,$(DENO_LESSONS),$(eval $(call lesson_rules,$(l),deno)))
+
+check:
+	go vet ./...
+	cd lessons/deno && deno check .
 
 ps:
 	@docker ps --filter "label=com.docker.compose.project" --format '{{.Label "com.docker.compose.project"}}\t{{.Status}}\t{{.Ports}}' | grep '^trinkets-' || echo "no trinkets services running"

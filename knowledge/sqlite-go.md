@@ -1,7 +1,7 @@
 # SQLite from Go (modernc.org/sqlite): gotchas
 
 Applies when a lesson opens SQLite through `database/sql` with the pure-Go
-`modernc.org/sqlite` driver (see `lessons/sqlite-wal-lab/main.go`).
+`modernc.org/sqlite` driver (see `lessons/go/sqlite-wal-lab/main.go`).
 
 - **Per-connection pragmas miss pooled connections.** `busy_timeout` (like most
   pragmas) belongs to one connection. `db.Exec("PRAGMA busy_timeout = 2000")`

@@ -1,7 +1,7 @@
 # Postgres from Go (pgx): gotchas
 
 Applies when a lesson talks to the local Postgres with `github.com/jackc/pgx/v5`
-(see `lessons/completed-job-counter/main.go`). Connect with
+(see `lessons/go/completed-job-counter/main.go`). Connect with
 `postgres.Connect(ctx)` from `internal/lab/postgres`, which reads
 `DATABASE_URL` and defaults to
 `postgres://trinkets:trinkets@localhost:5432/trinkets`.
@@ -18,7 +18,7 @@ Applies when a lesson talks to the local Postgres with `github.com/jackc/pgx/v5`
   42601): the query is parsed before arguments arrive, so table and column
   names must be in the SQL text. Write constant names in directly; quote a
   dynamic name with `pgx.Identifier{name}.Sanitize()` before splicing it in.
-  Verified 2026-09-26 in `lessons/background-job-queue/main.go`.
+  Verified 2026-09-26 in `lessons/go/background-job-queue/main.go`.
 - **A blocked `for update` re-checks the row after waiting.** When a second
   transaction's `select ... where status = 'pending' ... for update` blocks
   on a row the first holds, and the first sets that row to `done` and commits,
@@ -29,7 +29,7 @@ Applies when a lesson talks to the local Postgres with `github.com/jackc/pgx/v5`
   slowest claim grows linearly with N. `skip locked` gives each worker a
   different row at once, so its slowest claim stays flat. Separate
   connections are required to see this; one connection cannot block itself.
-  Verified 2026-09-26 in `lessons/background-job-queue` with 1, 2, 4, and 8
+  Verified 2026-09-26 in `lessons/go/background-job-queue` with 1, 2, 4, and 8
   workers holding rows for 100 ms: slowest blocking claim 0.6, 107, 315, and
   730 ms; slowest skip locked claim 0.6 to 1.3 ms; every job claimed once in
   both modes.
