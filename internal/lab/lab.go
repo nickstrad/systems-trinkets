@@ -1,25 +1,14 @@
-// Package lab holds the few helpers every lesson repeats: service defaults,
-// fail-fast error checking, and the measurements.csv writer. It depends only
-// on the standard library so a lesson never compiles a driver it does not use.
+// Package lab holds the few helpers every lesson repeats: environment
+// defaults, fail-fast error checking, and the measurements.csv writer. It
+// depends only on the standard library so a lesson never compiles a driver it
+// does not use. Driver-specific helpers, including each service's URL, live
+// in the subpackages lab/postgres and lab/valkey.
 package lab
 
 import (
 	"os"
 	"time"
 )
-
-// Local dev credentials for the services in services/index.md. They are not
-// secret; every lesson prints and uses them as-is.
-const (
-	DefaultPostgresURL = "postgres://trinkets:trinkets@localhost:5432/trinkets"
-	DefaultValkeyURL   = "redis://localhost:6379"
-)
-
-// PostgresURL is DATABASE_URL, or the local default.
-func PostgresURL() string { return Env("DATABASE_URL", DefaultPostgresURL) }
-
-// ValkeyURL is CACHE_URL, or the local default. Pass it to redis.ParseURL.
-func ValkeyURL() string { return Env("CACHE_URL", DefaultValkeyURL) }
 
 // Env returns the environment variable named key, or def when it is unset or
 // empty.

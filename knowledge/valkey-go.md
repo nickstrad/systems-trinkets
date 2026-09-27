@@ -7,10 +7,11 @@ documented connection string is `redis://localhost:6379` (no auth), from
 
 - **Connect from the documented URL, not a bare address.**
   `redis.Options{Addr: ...}` wants `host:port`; passing `redis://localhost:6379`
-  to it fails. Use `redis.ParseURL(lab.ValkeyURL())` then
-  `redis.NewClient(opts)`. `lab.ValkeyURL()` (in `internal/lab`) reads
+  to it fails. `valkey.Connect(ctx)` (in `internal/lab/valkey`) does
+  `redis.ParseURL(valkey.URL())`, `redis.NewClient(opts)`, and a `Ping`, since
+  `NewClient` alone never contacts the server. `valkey.URL()` reads
   `CACHE_URL` and defaults to `redis://localhost:6379`, mirroring
-  `lab.PostgresURL()` for Postgres.
+  `postgres.URL()` for Postgres.
 - **A miss is `redis.Nil`, not an empty string.** `cache.Get(ctx, key).Result()`
   returns `err == redis.Nil` on a missing key; any other error is a real
   failure. `check(err)` cannot express that, so the read path spells it out.

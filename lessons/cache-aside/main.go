@@ -10,6 +10,8 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/nickstrad/systems-trinkets/internal/lab"
+	"github.com/nickstrad/systems-trinkets/internal/lab/postgres"
+	"github.com/nickstrad/systems-trinkets/internal/lab/valkey"
 )
 
 const (
@@ -22,17 +24,13 @@ const (
 func main() {
 	ctx := context.Background()
 
-	pg, err := pgx.Connect(ctx, lab.PostgresURL())
-	lab.Check(err)
+	pg := postgres.Connect(ctx)
 	defer pg.Close(ctx)
 
-	cacheOpts, err := redis.ParseURL(lab.ValkeyURL())
-	lab.Check(err)
-	cache := redis.NewClient(cacheOpts)
+	cache := valkey.Connect(ctx)
 	defer cache.Close()
-	lab.Check(cache.Ping(ctx).Err())
 
-	_, err = pg.Exec(ctx, `
+	_, err := pg.Exec(ctx, `
 		drop table if exists cache_aside_profiles;
 
 		create table cache_aside_profiles(

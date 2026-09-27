@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nickstrad/systems-trinkets/internal/lab"
+	"github.com/nickstrad/systems-trinkets/internal/lab/postgres"
 )
 
 const (
@@ -47,11 +48,10 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
 
-	db, err := pgx.Connect(ctx, lab.PostgresURL())
-	lab.Check(err)
+	db := postgres.Connect(ctx)
 	defer db.Close(ctx)
 
-	_, err = db.Exec(ctx, `
+	_, err := db.Exec(ctx, `
 		create table if not exists job_counter (
 			mode text primary key,
 			total integer not null default 0

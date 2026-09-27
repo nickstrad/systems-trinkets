@@ -7,14 +7,21 @@ Applies to every Go lesson. The repo is one module
 `make analyze-<name>`, or `make lab-<name>` for both. Changed 2026-09-25 from
 one module per lesson.
 
-- **Shared helpers live in `internal/lab`.** `lab.PostgresURL()` and
-  `lab.ValkeyURL()` read `DATABASE_URL` / `CACHE_URL` with the local defaults
-  (`postgres://trinkets:trinkets@localhost:5432/trinkets`,
-  `redis://localhost:6379`); `lab.Check` panics on error; `lab.Ms` converts a
-  duration to milliseconds; `lab.NewMeasurements(cols...)` creates
+- **Shared helpers live in `internal/lab`.** `lab.Env(key, def)` reads an
+  environment variable with a default; `lab.Check` panics on error; `lab.Ms`
+  converts a duration to milliseconds; `lab.NewMeasurements(cols...)` creates
   `measurements.csv` in the current directory, `Write(fields...)` appends a
   row, `Close` flushes, checks, and closes. The package is standard-library
   only, so a lesson never compiles a driver it does not import.
+- **Driver helpers live in one subpackage per service** (split out
+  2026-09-26). `internal/lab/postgres`: `postgres.URL()` is `DATABASE_URL` or
+  `postgres://trinkets:trinkets@localhost:5432/trinkets`;
+  `postgres.Connect(ctx) *pgx.Conn` opens one connection to it and panics on
+  error. `internal/lab/valkey`: `valkey.URL()` is `CACHE_URL` or
+  `redis://localhost:6379`; `valkey.Connect(ctx) *redis.Client` parses the
+  URL, opens a client, and pings it. Neither `Connect` takes a DSN on
+  purpose: the env var is the override, so there is one way to redirect a
+  lesson. Call `Connect` once per connection a lesson needs.
 - **Lessons run from their own directory.** The Makefile does `cd lessons/<name>`
   before `go run .`, because the CSV and `analyze.sql` use relative paths. Root
   commands like `go vet ./...` and `go build ./...` still cover every lesson.
