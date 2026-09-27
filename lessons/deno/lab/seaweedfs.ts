@@ -4,6 +4,7 @@
 import {
   CreateBucketCommand,
   DeleteObjectsCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -54,13 +55,20 @@ export async function ensureBucket(
   }
 }
 
-/** listKeys returns every object key under prefix, following pagination. */
-export async function listKeys(
+/** A StoredObject is one listing entry: its key and the store's modification time. */
+export interface StoredObject {
+  key: string;
+  /** Whole-second precision on SeaweedFS: two PUTs 250 ms apart list the same time. */
+  lastModified: Date;
+}
+
+/** listObjects returns every object under prefix, following pagination. */
+export async function listObjects(
   s3: S3Client,
   bucket: string,
   prefix: string,
-): Promise<string[]> {
-  const keys: string[] = [];
+): Promise<StoredObject[]> {
+  const objects: StoredObject[] = [];
   let token: string | undefined;
   do {
     const page = await s3.send(
@@ -71,11 +79,41 @@ export async function listKeys(
       }),
     );
     for (const obj of page.Contents ?? []) {
-      if (obj.Key !== undefined) keys.push(obj.Key);
+      if (obj.Key !== undefined && obj.LastModified !== undefined) {
+        objects.push({ key: obj.Key, lastModified: obj.LastModified });
+      }
     }
     token = page.NextContinuationToken;
   } while (token);
-  return keys;
+  return objects;
+}
+
+/** listKeys returns every object key under prefix. */
+export async function listKeys(
+  s3: S3Client,
+  bucket: string,
+  prefix: string,
+): Promise<string[]> {
+  return (await listObjects(s3, bucket, prefix)).map((o) => o.key);
+}
+
+/**
+ * exists reports whether one object is present, with a HEAD request. A
+ * missing key surfaces as a NotFound error (HTTP 404), which is the normal
+ * answer here, not a failure.
+ */
+export async function exists(
+  s3: S3Client,
+  bucket: string,
+  key: string,
+): Promise<boolean> {
+  try {
+    await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return true;
+  } catch (err) {
+    if ((err as { name?: string }).name === "NotFound") return false;
+    throw err;
+  }
 }
 
 /**

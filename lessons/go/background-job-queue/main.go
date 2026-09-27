@@ -11,6 +11,7 @@ import (
 
 	"github.com/nickstrad/systems-trinkets/internal/lab"
 	"github.com/nickstrad/systems-trinkets/internal/lab/postgres"
+	"github.com/nickstrad/systems-trinkets/lessons/go/background-job-queue/core"
 )
 
 const (
@@ -18,13 +19,6 @@ const (
 	// workTime is how long a worker holds its claimed row before finishing
 	// the job. With plain for update, every other worker waits for it.
 	workTime = 100 * time.Millisecond
-
-	// claimQuery locks the oldest pending job; the worker's transaction holds
-	// the row lock until it commits. skipLockedQuery is the same claim but
-	// passes over rows another transaction already holds.
-	claimQuery      = `select id from background_queue_jobs where status = 'pending' order by id limit 1 for update`
-	skipLockedQuery = claimQuery + ` skip locked`
-	finishQuery     = `update background_queue_jobs set status = 'done' where id = $1`
 )
 
 // workerCounts is how many workers race for the queue in each round. Each
@@ -36,15 +30,8 @@ var modes = []struct {
 	name  string
 	claim string
 }{
-	{"blocking", claimQuery},
-	{"skip_locked", skipLockedQuery},
-}
-
-// A claim is one worker's result: which job it got and how long the claim
-// query took, which is the time spent waiting on other workers' locks.
-type claim struct {
-	jobID int64
-	took  time.Duration
+	{"blocking", core.ClaimQuery},
+	{"skip_locked", core.SkipLockedQuery},
 }
 
 func main() {
@@ -86,14 +73,14 @@ func main() {
 				claims := runRound(ctx, admin, workers[:n], m.claim)
 				var slowest time.Duration
 				for w, c := range claims {
-					slowest = max(slowest, c.took)
+					slowest = max(slowest, c.Took)
 					out.Write(
 						m.name,
 						strconv.Itoa(n),
 						strconv.Itoa(trial),
 						strconv.Itoa(w+1),
-						fmt.Sprintf("%.3f", lab.Ms(c.took)),
-						strconv.FormatInt(c.jobID, 10),
+						fmt.Sprintf("%.3f", lab.Ms(c.Took)),
+						strconv.FormatInt(c.JobID, 10),
 					)
 				}
 				fmt.Printf("%-12s workers=%d trial=%d slowest_claim=%v\n", m.name, n, trial, slowest)
@@ -105,7 +92,7 @@ func main() {
 
 // runRound resets the queue to one pending job per worker, starts every
 // worker at once, and returns each worker's claim in worker order.
-func runRound(ctx context.Context, admin *pgx.Conn, workers []*pgx.Conn, claimSQL string) []claim {
+func runRound(ctx context.Context, admin *pgx.Conn, workers []*pgx.Conn, claimSQL string) []core.Claim {
 	_, err := admin.Exec(ctx, `truncate background_queue_jobs restart identity`)
 	lab.Check(err)
 	_, err = admin.Exec(ctx,
@@ -114,32 +101,15 @@ func runRound(ctx context.Context, admin *pgx.Conn, workers []*pgx.Conn, claimSQ
 	)
 	lab.Check(err)
 
-	claims := make([]claim, len(workers))
+	claims := make([]core.Claim, len(workers))
 	var wg sync.WaitGroup
 	for i, db := range workers {
-		wg.Go(func() { claims[i] = work(ctx, db, claimSQL) })
+		wg.Go(func() {
+			result, err := core.Work(ctx, db, claimSQL, workTime)
+			lab.Check(err)
+			claims[i] = result
+		})
 	}
 	wg.Wait()
 	return claims
-}
-
-// work claims one job, holds it for workTime as if processing it, marks it
-// done, and commits. Only the claim is timed: with plain for update it waits
-// for every earlier worker's commit, with skip locked it takes the next free
-// job at once.
-func work(ctx context.Context, db *pgx.Conn, claimSQL string) claim {
-	tx, err := db.Begin(ctx)
-	lab.Check(err)
-	defer tx.Rollback(ctx)
-
-	start := time.Now()
-	var id int64
-	lab.Check(tx.QueryRow(ctx, claimSQL).Scan(&id))
-	took := time.Since(start)
-
-	time.Sleep(workTime)
-	_, err = tx.Exec(ctx, finishQuery, id)
-	lab.Check(err)
-	lab.Check(tx.Commit(ctx))
-	return claim{jobID: id, took: took}
 }

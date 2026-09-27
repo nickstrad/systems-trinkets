@@ -16,8 +16,9 @@ Set up 2026-09-27 with the first Deno lesson, `cross-store-failure`.
   Verified 2026-09-27: the import map resolved from a lesson subdirectory in
   a scratch copy and in `make lab-cross-store-failure`.
 - **Shared helpers live in `lessons/deno/lab/`, one file per concern,
-  mirroring `internal/lab`.** `lab.ts`: `env(key, def)` and the
-  `Measurements` class (`new Measurements(...columns)` creates
+  mirroring `internal/lab`.** `lab.ts`: `env(key, def)`, `sleep(ms)`,
+  `mapConcurrent(items, limit, fn)` (bounded-concurrency map that keeps item
+  order, for loading a service from one process), and the `Measurements` class (`new Measurements(...columns)` creates
   `measurements.csv` in the current directory and writes the header,
   `write(...fields)` appends a row, quoting like Go's `encoding/csv`,
   `close()` closes and prints `wrote measurements.csv`). It imports no driver.
@@ -28,8 +29,10 @@ Set up 2026-09-27 with the first Deno lesson, `cross-store-failure`.
   and pings. `seaweedfs.ts`: `url()` is `OBJECT_STORE_URL` or
   `http://localhost:8333` with access key `trinkets`, secret key
   `trinkets-secret`, region `us-east-1`, path-style; `connect()` builds the
-  `S3Client`; `ensureBucket`, `listKeys` (paginated), and `deleteKeys`
-  (`DeleteObjects` in batches of 1000) cover setup and reset. The env var is
+  `S3Client`; `ensureBucket`, `listObjects` (paginated, with the store's
+  whole-second `lastModified`), `listKeys`, `exists` (HEAD), and `deleteKeys`
+  (`DeleteObjects` in batches of 1000) cover setup, checks, and reset. S3
+  behavior gotchas are in `seaweedfs-s3.md`. The env var is
   the only override, so there is one way to redirect a lesson, same as Go.
 - **`pg` ships no types; without a directive `Client` is `any`.** The
   failure is indirect: `deno check` passes on the helper and then reports
@@ -43,9 +46,6 @@ Set up 2026-09-27 with the first Deno lesson, `cross-store-failure`.
   `connect()` and `ping()`. Verified 2026-09-27: a set/get round trip against
   `make up-valkey`, and `CACHE_URL=redis://localhost:1` failed immediately with
   `ECONNREFUSED`.
-- **SeaweedFS supports `DeleteObjects`.** One batched request replaced a
-  per-key `DeleteObject` loop; the lesson's reconcile step deleted 4 orphans
-  in one round trip. Verified 2026-09-27 in `cross-store-failure`.
 - **Checking without services:** `make check` runs `go vet ./...` and
   `cd lessons/deno && deno check .`, which type-checks every Deno file
   without running anything. `deno fmt` from `lessons/deno` formats the tree
@@ -55,8 +55,13 @@ Set up 2026-09-27 with the first Deno lesson, `cross-store-failure`.
   ["./lessons/deno"]` so the `denoland.vscode-deno` extension
   (`.vscode/extensions.json` recommends it) owns that tree and the regular
   TypeScript service leaves it alone. New Deno lessons need no settings edit.
-  Reload the window if old diagnostics persist. Editor diagnostics were not
-  inspected after the 2026-09-27 restructure.
+  **Stale-cache symptom:** after a helper in `lab/` is edited outside the
+  editor (by an agent, `git pull`, or a script), `main.ts` shows
+  `Module '"lab/lab.ts"' has no exported member ...` for the new exports and
+  then `implicitly has an 'any' type` on every callback typed through them,
+  while `deno check` passes. Run "Deno: Restart Language Server" or reload the
+  window. Seen 2026-09-27 after adding `sleep`, `mapConcurrent`, `listObjects`,
+  and `exists`.
 - **Adding a lesson:** create `lessons/deno/<name>/main.ts` and `analyze.sql`;
   the Makefile discovers `lessons/deno/*/main.ts`. Start `main.ts` with a
   comment naming the services it needs, import from `lab/`, and use top-level

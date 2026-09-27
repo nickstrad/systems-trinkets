@@ -1,103 +1,202 @@
-// Lesson: a write that spans two stores has no transaction. Each upload PUTs
-// an object to SeaweedFS and then INSERTs its metadata row in Postgres; a
-// crash between the two leaves an orphan object that no row points at. The
-// repair is a reconciler: list both sides, diff, delete what only the object
-// store has.
+// Lesson: a write that spans two stores has no transaction. An upload PUTs an
+// object to SeaweedFS and writes a metadata row in Postgres; a crash between
+// the two leaves the stores disagreeing, and a reconciler has to repair the
+// disagreement later. Three experiments, one CSV:
 //
-// Needs: make up-postgres up-seaweedfs
-import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { Measurements } from "lab/lab.ts";
+//   ordering  For each write order and store size, upload objects with 1 in
+//             crashEvery dying right before its last write, then repair. The
+//             order decides the failure class: PUT-then-INSERT leaves orphan
+//             objects nobody can see, INSERT-then-PUT leaves dangling rows
+//             users can hit, and an intent row (pending -> PUT -> committed)
+//             leaves only pending rows the reconciler can finish instead of
+//             guess about. The same rows show reconciler cost against store
+//             size: finding an absence means scanning everything, while
+//             pending rows scope the work to what is in doubt.
+//   grace     Run the orphan reconciler while uploads are still in flight.
+//             With no grace window it deletes objects whose INSERT is
+//             milliseconds away and the repair itself corrupts data. The
+//             window has to cover the in-flight time plus the store's
+//             timestamp granularity (whole seconds here), and every second of
+//             it leaves young orphans for the next pass.
+//
+// The ordering rows also show that scoping the reconciler to pending rows
+// makes it check 10x fewer items but not run faster at this crash rate: a
+// HEAD plus an UPDATE per row costs more than listing everything in bulk.
+// The scoped repair wins only when few writes are in doubt.
+//
+// Needs: make up-postgres up-seaweedfs. Runs about half a minute.
+import { createOperations, type Mode, type State, table } from "./core.ts";
+import { mapConcurrent, Measurements, sleep } from "lab/lab.ts";
 import * as postgres from "lab/postgres.ts";
 import * as seaweedfs from "lab/seaweedfs.ts";
 
 const bucket = "lab";
 const prefix = "cross-store-failure/";
-const uploads = 20;
-// Every crashEvery-th upload "crashes" after the PUT and before the INSERT.
-const crashEvery = 5;
+// 1 in crashEvery uploads dies right before its last write.
+const crashEvery = 10;
+const concurrency = 16;
+
+// ordering: every mode at every size.
+const modes: Mode[] = ["put_then_insert", "insert_then_put", "intent_then_put"];
+const sizes = [100, 1000, 10_000];
+
+// grace: oldOrphans crashed uploads aged past every window, then inflight
+// uploads that PUT now and INSERT inflightMs later, with the reconciler
+// running in between.
+const graceSeconds = [0, 1, 2];
+const oldOrphans = 20;
+const inflight = 40;
+const inflightMs = 1000;
 
 const pg = await postgres.connect();
 const s3 = seaweedfs.connect();
-
+const { upload, measure, reconcileOrphans, repair } = createOperations({
+  pg,
+  s3,
+  bucket,
+  prefix,
+  concurrency,
+});
 await seaweedfs.ensureBucket(s3, bucket);
 await pg.query(`
-  drop table if exists cross_store_failure_metadata;
+  drop table if exists ${table};
 
-  create table cross_store_failure_metadata(
+  create table ${table}(
     object_key text primary key,
+    status text not null default 'committed',
     created_at timestamptz not null default now()
   );
 `);
-await seaweedfs.deleteKeys(
-  s3,
-  bucket,
-  await seaweedfs.listKeys(s3, bucket, prefix),
-);
 
-for (let id = 1; id <= uploads; id++) {
-  const key = `${prefix}object-${id}.txt`;
-  await s3.send(
-    new PutObjectCommand({ Bucket: bucket, Key: key, Body: `payload-${id}` }),
-  );
-  if (id % crashEvery === 0) {
-    console.log(`simulated crash after PUT: ${key}`);
-    continue;
-  }
-  await pg.query(
-    `insert into cross_store_failure_metadata(object_key) values ($1)`,
-    [key],
+const key = (id: number) => `${prefix}object-${id}.txt`;
+const range = (n: number) => Array.from({ length: n }, (_, i) => i);
+
+async function reset() {
+  await pg.query(`truncate ${table}`);
+  await seaweedfs.deleteKeys(
+    s3,
+    bucket,
+    await seaweedfs.listKeys(s3, bucket, prefix),
   );
 }
 
-// findOrphans is the reconciler's read side: the object keys the store has
-// that no metadata row claims. The two reads are independent, so they overlap.
-async function findOrphans() {
-  const [keys, metadata] = await Promise.all([
-    seaweedfs.listKeys(s3, bucket, prefix),
-    pg.query<{ object_key: string }>(
-      `select object_key from cross_store_failure_metadata`,
-    ),
-  ]);
-  const known = new Set(metadata.rows.map((row) => row.object_key));
-  return {
-    objects: keys.length,
-    metadata: known.size,
-    orphans: keys.filter((key) => !known.has(key)),
-  };
+async function timed<T>(fn: () => Promise<T>) {
+  const start = performance.now();
+  const result = await fn();
+  return { result, ms: performance.now() - start };
 }
-
-const before = await findOrphans();
-console.log("before reconciliation", before);
-
-const start = performance.now();
-for (const key of before.orphans) console.log(`deleting orphan: ${key}`);
-await seaweedfs.deleteKeys(s3, bucket, before.orphans);
-const reconcileMs = performance.now() - start;
-
-const after = await findOrphans();
-console.log("after reconciliation", after);
 
 const out = new Measurements(
-  "phase",
-  "object_count",
-  "metadata_count",
-  "orphan_count",
+  "experiment",
+  "mode",
+  "objects",
+  "grace_s",
+  "objects_before",
+  "rows_before",
+  "orphans_before",
+  "dangling_before",
+  "pending_before",
+  "checked",
   "reconcile_ms",
+  "objects_after",
+  "rows_after",
+  "orphans_after",
+  "dangling_after",
+  "pending_after",
 );
-out.write(
-  "before_reconcile",
-  before.objects,
-  before.metadata,
-  before.orphans.length,
-  0,
-);
-out.write(
-  "after_reconcile",
-  after.objects,
-  after.metadata,
-  after.orphans.length,
-  reconcileMs.toFixed(3),
-);
-out.close();
 
+function record(
+  experiment: string,
+  mode: Mode,
+  objects: number,
+  graceS: number,
+  before: State,
+  checked: number,
+  ms: number,
+  after: State,
+) {
+  console.log(
+    `${experiment} mode=${mode} objects=${objects} grace=${graceS}s ` +
+      `before: orphans=${before.orphans} dangling=${before.dangling} pending=${before.pending} | ` +
+      `checked=${checked} in ${ms.toFixed(1)}ms | ` +
+      `after: objects=${after.objects} rows=${after.rows} orphans=${after.orphans} dangling=${after.dangling} pending=${after.pending}`,
+  );
+  out.write(
+    experiment,
+    mode,
+    objects,
+    graceS,
+    before.objects,
+    before.rows,
+    before.orphans,
+    before.dangling,
+    before.pending,
+    checked,
+    ms.toFixed(3),
+    after.objects,
+    after.rows,
+    after.orphans,
+    after.dangling,
+    after.pending,
+  );
+}
+
+for (const mode of modes) {
+  for (const n of sizes) {
+    await reset();
+    await mapConcurrent(
+      range(n),
+      concurrency,
+      (id) => upload(mode, key(id), id % crashEvery === 0),
+    );
+    const before = await measure();
+    const { result: checked, ms } = await timed(repair[mode]);
+    const after = await measure();
+    record("ordering", mode, n, 0, before, checked, ms, after);
+  }
+}
+
+// The oldest grace window must already have passed for the old orphans, or
+// the reconciler would skip them too.
+const ageMs = Math.max(...graceSeconds) * 1000 + 200;
+for (const graceS of graceSeconds) {
+  await reset();
+  await mapConcurrent(
+    range(oldOrphans),
+    concurrency,
+    (id) => upload("put_then_insert", key(id), true),
+  );
+  await sleep(ageMs);
+  // Start the in-flight PUTs late in a wall-clock second. The store records
+  // whole seconds, so these objects will look up to a second older than they
+  // are, the worst case a real system hits at random; placing them here makes
+  // the run show it every time instead of one run in two.
+  await sleep((800 - (Date.now() % 1000) + 1000) % 1000);
+  const inflightDone = mapConcurrent(range(inflight), inflight, (id) =>
+    upload(
+      "put_then_insert",
+      key(oldOrphans + id),
+      id % crashEvery === 0,
+      inflightMs,
+    ));
+  // Reconcile halfway through the in-flight window, then let the uploads
+  // finish before measuring so their INSERTs land.
+  await sleep(inflightMs / 2);
+  const before = await measure();
+  const { result: checked, ms } = await timed(() => reconcileOrphans(graceS));
+  await inflightDone;
+  const after = await measure();
+  record(
+    "grace",
+    "put_then_insert",
+    oldOrphans + inflight,
+    graceS,
+    before,
+    checked,
+    ms,
+    after,
+  );
+}
+
+out.close();
 await pg.end();

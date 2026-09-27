@@ -15,14 +15,20 @@ overrides, the CSV writer) exist once per runtime with the same shape:
 | | Go | Deno |
 |---|---|---|
 | Toolchain root | `go.mod` (repo root, one module) | `lessons/deno/deno.json` (import map, one lockfile) |
-| Shared helpers | `internal/lab` (`lab.Env`, `lab.Check`, `lab.NewMeasurements`) | `lessons/deno/lab/lab.ts` (`env`, `Measurements`) |
+| Shared helpers | `internal/lab` (`lab.Env`, `lab.Check`, `lab.NewMeasurements`) | `lessons/deno/lab/lab.ts` (`env`, `sleep`, `mapConcurrent`, `Measurements`) |
 | Postgres | `internal/lab/postgres` (`postgres.Connect`) | `lab/postgres.ts` (`postgres.connect`) |
 | Valkey | `internal/lab/valkey` (`valkey.Connect`) | `lab/valkey.ts` (`valkey.connect`) |
-| SeaweedFS (S3) | not yet needed by a Go lesson | `lab/seaweedfs.ts` (`connect`, `ensureBucket`, `listKeys`, `deleteKeys`) |
+| SeaweedFS (S3) | not yet needed by a Go lesson | `lab/seaweedfs.ts` (`connect`, `ensureBucket`, `listObjects`, `listKeys`, `exists`, `deleteKeys`) |
 
 A new lesson is a new directory under `lessons/go/` or `lessons/deno/` with
 its entry file and `analyze.sql`; the Makefile discovers it, so no Makefile
 edit is needed.
+
+Each current lesson separates reusable operations from its experiment runner:
+Go lessons expose a `core/` package, and the Deno lesson exposes `core.ts`.
+The runner owns connections, fixtures, resets, and CSV reporting. A future HTTP
+handler can call the same operations with its own clients. See
+[lesson core entry points](knowledge/lesson-cores.md).
 
 ## Running a lesson
 

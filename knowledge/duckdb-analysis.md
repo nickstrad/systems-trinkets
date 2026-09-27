@@ -38,3 +38,17 @@ Verified 2026-09-26: the named-group ratio ran in
 `lessons/go/background-job-queue/analyze.sql` via `make analyze-background-job-queue`.
 Verified 2026-09-27: the named-group ratio and `.print` labels ran in the
 first Deno lesson, `lessons/deno/cross-store-failure/analyze.sql`.
+
+## Optional k6 follow-up
+
+Use [add-basic-k6-testing](../.claude/skills/add-basic-k6-testing/SKILL.md)
+after completing a lesson to add HTTP and local performance experiments. Its
+[CSV/SQL reference](../.claude/skills/add-basic-k6-testing/references/k6-duckdb.md)
+keeps the performance output separate from the base lesson measurements.
+k6 CSV rows are metric samples: filter by metric name before aggregating;
+counting every row overcounts requests. Keep status groups separate for latency.
+
+Verified 2026-09-27 against the official k6 CSV documentation and by running the
+reference SQL in DuckDB over a synthetic three-request fixture: success p50/p95
+15/19.5 ms, HTTP failure rate 33.33%, two dropped iterations. This verifies the
+SQL shape and arithmetic; k6 was unavailable, so no live export was tested.

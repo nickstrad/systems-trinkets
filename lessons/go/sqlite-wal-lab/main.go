@@ -7,11 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"time"
 
 	_ "modernc.org/sqlite"
 
 	"github.com/nickstrad/systems-trinkets/internal/lab"
+	"github.com/nickstrad/systems-trinkets/lessons/go/sqlite-wal-lab/core"
 )
 
 const trials = 3
@@ -66,37 +66,19 @@ insert into events(payload) values ('seed');
 `)
 	lab.Check(err)
 
-	reader, err := db.Conn(ctx)
-	lab.Check(err)
-	defer reader.Close()
-
-	tx, err := reader.BeginTx(ctx, nil)
+	// Reading establishes a snapshot, held until the deferred rollback.
+	tx, count, err := core.OpenSnapshot(ctx, db)
 	lab.Check(err)
 	defer tx.Rollback()
-
-	// The first read starts the snapshot; the transaction holds it until Rollback.
-	var count int
-	lab.Check(tx.QueryRowContext(ctx, `select count(*) from events`).Scan(&count))
 	fmt.Printf("\n%s trial %d: reader snapshot open (%d rows)\n", mode, trial, count)
 
-	writer, err := db.Conn(ctx)
+	write, err := core.WriteEvent(ctx, db)
 	lab.Check(err)
-	defer writer.Close()
-
-	// Preparing loads the schema and compiles the insert before the timer
-	// starts, so the timer measures only the lock wait and the write.
-	insert, err := writer.PrepareContext(ctx, `insert into events(payload) values ('new event')`)
-	lab.Check(err)
-	defer insert.Close()
-
-	start := time.Now()
-	_, err = insert.ExecContext(ctx)
-	elapsed := time.Since(start)
-	fmt.Printf("write took: %v\n", elapsed)
+	fmt.Printf("write took: %v\n", write.Elapsed)
 
 	result := "ok"
-	if err != nil {
-		result = err.Error() // The measured outcome, not a lab failure.
+	if write.WriteErr != nil {
+		result = write.WriteErr.Error() // The measured outcome, not a lab failure.
 	}
-	return measurement{lab.Ms(elapsed), result}
+	return measurement{lab.Ms(write.Elapsed), result}
 }
