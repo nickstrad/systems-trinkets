@@ -29,6 +29,7 @@ Available walkthroughs:
 - [Job queue](lessons/go/background-job-queue/perf/README.md): synchronous worker requests and lock contention.
 - [Completed job counter](lessons/go/completed-job-counter/perf/README.md): duplicates and idempotency.
 - [SQLite WAL](lessons/go/sqlite-wal-lab/perf/README.md): writes while a reader holds a snapshot.
+- [Pipelining work](lessons/go/pipelining-work/perf/README.md): round trips amortized by a Valkey pipeline.
 - [Cross-store failure](lessons/deno/cross-store-failure/perf/README.md): injected failures and repair.
 
 For future completed lessons, invoke `$add-basic-k6-testing` with the lesson path
@@ -181,6 +182,7 @@ Deno type-checks the k6 workloads against `@types/k6` through the root
 | `background-job-queue` | `make up-postgres` | `make lab-background-job-queue` | `make lab-k6-background-job-queue` | `MODE=blocking`, `WORK_MS`, `POOL_SIZE` |
 | `completed-job-counter` | `make up-postgres` | `make lab-completed-job-counter` | `make lab-k6-completed-job-counter` | `MODE=naive` |
 | `sqlite-wal-lab` | none | `make lab-sqlite-wal-lab` | `make lab-k6-sqlite-wal-lab` | `MODE=DELETE` (fails on purpose) |
+| `pipelining-work` | `make up-valkey` | `make lab-pipelining-work` | `make lab-k6-pipelining-work` | `MODE=sequential`, `BATCH_SIZE=1000` |
 | `cross-store-failure` | `make up-postgres up-seaweedfs` | `make lab-cross-store-failure` | `make lab-k6-cross-store-failure` | `MODE=put_then_insert` |
 
 `make help` lists the current lesson names.

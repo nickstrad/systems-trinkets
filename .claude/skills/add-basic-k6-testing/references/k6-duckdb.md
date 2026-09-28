@@ -1,74 +1,118 @@
-# A small k6 → CSV → DuckDB path
+# k6 CSV → DuckDB: the shapes the lesson SQL relies on
 
-Generate the lesson's SQL from real smoke output. k6 CSV contains multiple metric
-samples per request, not a request table. Filter by `metric_name` before counting
-or aggregating. Inspect the actual header and preserve the needed system tags.
-The native output command is `k6 run --out csv=metrics.csv script.ts`.
+k6 writes one row per **metric sample**, not per request:
+`k6 run --out csv=metrics.csv perf/k6.ts`. A request produces several rows
+(`http_reqs`, `http_req_duration`, `http_req_failed`, and more), so filter by
+`metric_name` and by the request `name` tag before counting or aggregating.
 [CSV output documentation](https://grafana.com/docs/k6/latest/results-output/real-time/csv/)
 
-Prefer one output directory per run. The following SQL assumes it is executed
-from that directory, containing `metrics.csv`; a generated walkthrough must give
-the exact command to reach the directory and load `perf/analyze.sql`.
+Header, as written by k6 v2.3 (verified 2026-09-28):
 
-```sql
-create table samples as
-select * from read_csv('metrics.csv', header = true, all_varchar = true);
-
-.print 'HTTP latency by scenario, operation, and status (milliseconds)'
-select scenario, name, status,
-       count(*) as samples,
-       round(median(cast(metric_value as double)), 2) as p50_ms,
-       round(quantile_cont(cast(metric_value as double), 0.95), 2) as p95_ms
-from samples
-where metric_name = 'http_req_duration'
-group by all
-order by all;
-
-.print 'HTTP failure rate by scenario and operation'
-select scenario, name,
-       count(*) as samples,
-       round(100 * avg(cast(metric_value as double)), 2) as failed_pct
-from samples
-where metric_name = 'http_req_failed'
-group by all
-order by all;
-
-.print 'Iterations the load generator could not start'
-select coalesce(sum(cast(metric_value as double)), 0) as dropped_iterations
-from samples
-where metric_name = 'dropped_iterations';
+```
+metric_name,timestamp,metric_value,check,error,error_code,expected_response,
+group,method,name,proto,scenario,service,status,subproto,tls_version,url,
+extra_tags,metadata
 ```
 
-This is a starting shape, not a requirement to copy all three queries. Adapt it
-to the hypothesis and exclude readiness/polling requests by stable `name` tags.
-Use `http_reqs` values for HTTP counts; `checks` counts assertions, not requests.
-Treat an empty duration or failure table as missing evidence, not a passing run.
+The shared `scripts/perf/analyze.sql` loads this as `samples`, casting
+`metric_value` to double and `timestamp` to bigint (`K6_CSV_TIME_FORMAT=unix`
+is set by the runner). The lesson's `perf/analyze.sql` is appended after it
+and runs in the same DuckDB session from the run directory, so it can read
+`samples`, `settings.json`, and `domain.json` directly.
 
-`http_req_duration` excludes connection establishment and DNS time. Failure rate
-follows k6's configured expected-response policy; body checks are separate.
-Dropped iterations indicate unsent work, not HTTP errors. All can matter in the
-same run. [Metric definitions](https://grafana.com/docs/k6/latest/using-k6/metrics/reference/)
+## Custom tags land in `extra_tags`
 
-For stress/spike, substitute or add a short time-bucket query so a whole-run
-percentile does not hide recovery. Set the CSV timestamp format explicitly if
-using timestamps. Include zero-traffic buckets when calculating rates; do not
-divide by only the seconds that contain samples. Keep the configured arrival
-schedule beside the results to compare offered demand with achieved throughput.
-Do not average percentiles across buckets or runs; recompute from raw samples.
+System tags (`name`, `scenario`, `status`, ...) have their own columns. Any
+other tag on a request or a custom metric is joined into `extra_tags` as
+`key=value&key=value`. Verified with a `Trend.add(v, {variant: "pipeline",
+name: "operation"})`: the row had `name=operation` in its column and
+`extra_tags=variant=pipeline`. Extract it once and group by it:
 
-Use p50/p95 with sample counts by default. A tiny smoke run does not support a
-stable tail estimate. Label warm-up, cold-start, failures, and successful results
-instead of blending them into a single unexplained number. Retain failed requests.
+```sql
+.print 'Base lesson table under load: batch latency by variant (milliseconds)'
+select regexp_extract(extra_tags, 'variant=([^&]+)', 1) as variant,
+       count(*) as batches,
+       round(median(metric_value), 3) as p50_batch_ms,
+       round(quantile_cont(metric_value, 0.95), 3) as p95_batch_ms
+from samples
+where metric_name = 'http_req_duration' and name = 'operation'
+group by all
+order by all;
+```
 
-For a queue, use a separate final domain check for accepted/completed/pending work.
-If the lesson needs completion latency, instrument completion or use bounded
-polling and explain its resolution. HTTP latency alone cannot answer that question.
+Reuse the alias for the lesson's question, in the named-group form so a
+mistyped variant shows as NULL beside a value instead of vanishing:
 
-Consult the installed version's official documentation if an API differs:
+```sql
+.print 'Sequential vs pipeline: ratio of median HTTP batch latency'
+with by_variant as (
+  select regexp_extract(extra_tags, 'variant=([^&]+)', 1) as variant,
+         metric_value
+  from samples
+  where metric_name = 'http_req_duration' and name = 'operation'
+)
+select round(median(metric_value) filter (where variant = 'sequential'), 3) as sequential_ms,
+       round(median(metric_value) filter (where variant = 'pipeline'), 3) as pipeline_ms,
+       round(sequential_ms / pipeline_ms, 2) as sequential_to_pipeline_ratio
+from by_variant;
+```
 
+A custom metric tagged the same way splits the same way; a `Trend` of the
+server's own `elapsed_ms` beside `http_req_duration` shows how much HTTP adds:
+
+```sql
+.print 'Core call time reported by the server, by variant (milliseconds)'
+select regexp_extract(extra_tags, 'variant=([^&]+)', 1) as variant,
+       count(*) as samples,
+       round(median(metric_value), 3) as p50_core_ms
+from samples
+where metric_name = 'core_ms'
+group by all
+order by all;
+```
+
+## Settings and final state are JSON files beside the CSV
+
+```sql
+.print 'Server settings for this run'
+select fixtures, unnest(server) from read_json('settings.json');
+
+.print 'Invariant: what the server confirmed vs what the store holds'
+select mode, batches, expected_sum, actual_sum,
+       actual_sum - expected_sum as difference
+from read_json('domain.json');
+```
+
+`unnest(server)` spreads the `/health` settings map into one column per
+setting (verified against a run's `settings.json` with `BATCH_SIZE`, `MODE`,
+`PORT`). Adapt the `domain.json` column names to what the adapter's `/stats`
+returns; keep both sides of the invariant visible, not a boolean.
+
+## Interpretation rules
+
+- `http_reqs` counts requests; `checks` counts assertions. Two checks per
+  request plus teardown checks is normal.
+- `http_req_duration` excludes connection setup. `http_req_failed` follows
+  k6's expected-status policy; body checks are separate.
+- Dropped iterations mean the arrival-rate executor could not start work: the
+  generator was short of virtual users, not the server of capacity. Report
+  them with the latency; both can matter in one run.
+- Never average percentiles across buckets or runs; recompute from samples.
+  The shared ten-second buckets show recovery after a spike or a stress step;
+  boundary buckets are partial.
+- A smoke run's p95 is a wiring check, not an estimate. Compare like profiles
+  with similar sample counts.
+- Keep failed and successful samples in separate rows (group by `status`),
+  and treat an empty table as missing evidence, not a passing run.
+- For asynchronous work, HTTP latency is acceptance latency. Completion needs
+  a domain check or bounded polling with its resolution stated.
+
+## Documentation
+
+- [Metric reference](https://grafana.com/docs/k6/latest/using-k6/metrics/reference/)
+- [Tags and groups](https://grafana.com/docs/k6/latest/using-k6/tags-and-groups/)
 - [Checks and thresholds](https://grafana.com/docs/k6/latest/using-k6/thresholds/)
-- [Arrival models](https://grafana.com/docs/k6/latest/using-k6/scenarios/concepts/open-vs-closed/)
+- [Open vs closed models](https://grafana.com/docs/k6/latest/using-k6/scenarios/concepts/open-vs-closed/)
 - [Ramping arrival rate](https://grafana.com/docs/k6/latest/using-k6/scenarios/executors/ramping-arrival-rate/)
 
-Documentation reviewed 2026-09-27. The examples are guidance for generated
-scaffolding; verify the final lesson analysis against its actual k6 output.
+Reviewed 2026-09-27; tag and JSON shapes verified locally 2026-09-28.

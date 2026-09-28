@@ -31,6 +31,12 @@ Verified 2026-09-24: both lessons' `analyze.sql` ran in DuckDB with these forms.
   Naming the groups keeps the ratio meaning a/b; `max(avg) / min(avg)` over a
   CTE only means that while `a` happens to be the slower one
   (`lessons/go/background-job-queue/analyze.sql`).
+- **Group literals must match what the runner writes.** A filter such as
+  `variant = 'pipelined'` when `main.go` writes `pipeline` raises no error:
+  the filtered aggregate is NULL and so is every ratio built from it. Keep the
+  two literals side by side in one `select` (the named-group form) so a
+  mismatch is visible, and check the CSV's actual values when a column comes
+  back NULL.
 
 Verified 2026-09-25: alias reuse ran in `lessons/go/cache-aside/analyze.sql`;
 `.print` labels ran in all three lessons' `analyze.sql`.
@@ -38,6 +44,8 @@ Verified 2026-09-26: the named-group ratio ran in
 `lessons/go/background-job-queue/analyze.sql` via `make analyze-background-job-queue`.
 Verified 2026-09-27: the named-group ratio and `.print` labels ran in the
 first Deno lesson, `lessons/deno/cross-store-failure/analyze.sql`.
+Verified 2026-09-28: in `lessons/go/pipelining-work`, a mistyped group
+literal returned NULL for the aggregate and the ratio with no error.
 
 ## Optional k6 follow-up
 

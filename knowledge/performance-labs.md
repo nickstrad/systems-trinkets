@@ -77,6 +77,21 @@ not asynchronous submission latency. The counter omits total for skipped events.
 Cross-store simulated crashes are explicit experiment outcomes in successful HTTP
 responses; teardown reports state before repair and verifies state after repair.
 
+Custom tags on a request or a custom metric land in the CSV `extra_tags`
+column as `key=value&key=value`; system tags such as `name` keep their own
+columns. `regexp_extract(extra_tags, 'variant=([^&]+)', 1)` splits samples by
+variant, and `select fixtures, unnest(server) from read_json('settings.json')`
+prints the server's settings as one row (verified 2026-09-28 with k6 v2.3.0
+and DuckDB against a real run directory). The
+[add-basic-k6-testing](../.claude/skills/add-basic-k6-testing/SKILL.md) skill
+(rewritten 2026-09-28) now expects the lesson's contrast to be a tagged
+per-request variant where the core allows it, a required lesson
+`perf/analyze.sql` that reproduces the base lesson's table by variant, and
+the shared `request` helper extended to accept extra tags. The six existing
+`perf/` directories predate that shape: they use one fixed `MODE` per run
+and no lesson SQL, so their tables look alike across lessons and the mode is
+only visible in `settings.json` and `domain.json`.
+
 k6 CSV is a metric-sample table. Filter by metric name and request name before
 counting requests. Stats/repair requests explain why total HTTP counts exceed
 operation counts. SQL separates statuses, reports dropped iterations, and shows
@@ -108,5 +123,20 @@ resources do not establish production capacity or long-term reliability.
   the server and no `perf_*` schema remained.
 - A run directory holds about 72 KB; before the shared binary it held 16 MB.
 - Full stress, spike, and soak durations have not been executed.
+
+## Verification, 2026-09-28 (pipelining-work)
+
+- `make check` passed with the new Go adapter and `k6.ts`; `k6 inspect` parsed
+  the workload and `PROFILE=bogus` failed before traffic.
+- Ten-second `lab-k6-pipelining-work` smoke passed; SQL operation count (97)
+  matched the k6 summary, and the `increments` custom metric (97 samples of
+  200) matched `expected_sum` and `actual_sum` (19400) in `domain.json`.
+- Twenty-second `PROFILE=load` runs at 5 batches/s: `MODE=pipeline` p50 2.3 ms,
+  `MODE=sequential` p50 59 ms, both with zero failures, zero dropped
+  iterations, and matching sums. Neither mode reached saturation at that rate.
+- Sequential p50 over HTTP (59 ms) was well above the base lesson's single
+  batch (33 ms) at the same 200 keys; the cause was not investigated.
+- No `perf:pipeline:*` keys remained in Valkey after the server shut down.
+- Stress, spike, and soak were not executed for this lesson.
 
 Do not compare the smoke numbers as benchmarks; they verify wiring and invariants.

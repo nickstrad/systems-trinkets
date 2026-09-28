@@ -10,6 +10,7 @@ Import the core instead of invoking the entire lesson per request.
 | [background-job-queue/core/core.go](../lessons/go/background-job-queue/core/core.go) | `Work(ctx, db, claimSQL, workTime)` returns `Claim` and error; choose `ClaimQuery` or `SkipLockedQuery` in the adapter |
 | [completed-job-counter/core/core.go](../lessons/go/completed-job-counter/core/core.go) | `Apply(ctx, db, strategy, id)` returns total, applied, error; construct strategies with `Naive()` or `Idempotent()` |
 | [sqlite-wal-lab/core/core.go](../lessons/go/sqlite-wal-lab/core/core.go) | `OpenSnapshot(ctx, db)` returns a transaction and row count; `WriteEvent(ctx, db)` returns timed write outcome and setup error |
+| [pipelining-work/core/core.go](../lessons/go/pipelining-work/core/core.go) | `IncrementSequential(ctx, store, keys)` and `IncrementPipelined(ctx, store, keys)` return only an error; `Sum(ctx, store, keys)` reads every counter back with one MGET so runners and adapters verify stored state, not INCR replies. `Store` is three go-redis methods, satisfied by `*redis.Client` |
 | [cross-store-failure/core.ts](../lessons/deno/cross-store-failure/core.ts) | `createOperations({pg, s3, bucket, prefix, concurrency})` returns `upload`, `measure`, the three reconcilers, and the mode-to-repair map |
 
 Go packages are importable under
@@ -32,6 +33,11 @@ Keep these existing semantics in mind:
   registration. Roll back the snapshot to release its connection. Allow a second connection
   for the writer. A locked write is `WriteResult.WriteErr`, while connection or
   preparation failures use the function's returned error.
+- Pipelining cores take the key list, not a prefix and ids: the caller builds
+  keys once and passes the same slice to setup (`Del`), the operation, and
+  `Sum`, so they cannot disagree on the format. A pipeline is not atomic: on
+  error, earlier INCRs may already be applied. `Sum` counts a missing key as
+  zero.
 - Deno core import and factory construction perform no I/O. The caller owns
   client lifecycle and bucket setup. Its fixed metadata `table` and the
   `schema` that creates it are exported for setup; the supplied prefix scopes

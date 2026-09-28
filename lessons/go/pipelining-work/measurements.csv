@@ -1,0 +1,11 @@
+variant,run,batch_size,elapsed_ms,actual_sum
+sequential,1,200,40.891,200
+sequential,2,200,33.913,200
+sequential,3,200,35.480,200
+sequential,4,200,35.442,200
+sequential,5,200,35.361,200
+pipeline,1,200,0.306,200
+pipeline,2,200,0.281,200
+pipeline,3,200,0.265,200
+pipeline,4,200,0.274,200
+pipeline,5,200,0.285,200

@@ -1,165 +1,218 @@
 ---
 name: add-basic-k6-testing
-description: Add a small HTTP server and local k6 performance experiments to a completed Go or Deno systems-trinkets lesson, with lightweight DuckDB analysis and a 10–20 minute learner walkthrough. Use when asked to add basic k6 testing, wrap a finished lesson for load testing, or add a performance follow-up. Does not implement the base lesson for the learner.
+description: Turn a completed systems-trinkets lesson into an HTTP adapter, a k6 workload, and a DuckDB analysis that re-run the lesson's own comparison under concurrent traffic. Use when asked to add k6 testing, a performance follow-up, or a load test to a lesson in lessons/go or lessons/deno. Starts from the lesson's core, its invariant, and its analyze.sql; does not implement the base lesson for the learner.
 ---
 
 # Add basic k6 testing
 
-The learner writes the base lesson; the agent builds its performance extension.
-Deliver working local scaffolding and a short guided experiment that helps the
-learner predict, run, inspect, and explain behavior. Budget 10–20 minutes of
-learner time after setup, not 10–20 minutes for every possible test profile.
+The learner wrote the base lesson: a core with two or more variants, a runner
+that times them one at a time, an invariant it panics on, and an `analyze.sql`
+that ends with the number the lesson is about. The performance follow-up is
+**that same experiment under concurrent traffic**. A learner who has just read
+their `measurements.csv` must recognise the same variants, the same invariant,
+and the same final table in the k6 analysis, now with arrival rate and
+concurrency as new axes.
 
-## Establish the experiment
+It is not a generic HTTP benchmark. One endpoint, one fixed mode, and the
+shared latency table are the floor, not the deliverable. If the output of two
+different lessons would look the same apart from the numbers, the follow-up
+has not been built yet.
 
-Read the repository instructions, `knowledge/index.md`, the selected lesson,
-its analysis, and the relevant runtime helpers. Read `knowledge/lesson-cores.md`
-for the existing callable boundaries and result semantics, and
-`knowledge/performance-labs.md` for the existing Make/runner conventions.
-Use the repository work-log and
-knowledge skills. If the target is unclear, ask which lesson; otherwise proceed.
-Respect unfinished exercises and existing edits.
+## 1. Extract the lesson's experiment before writing anything
 
-State one hypothesis tied to the lesson and choose one core operation to expose.
-Examples: a cache miss burst increases database work; arrivals exceeding worker
-capacity grow the queue; duplicate events must not inflate a counter.
+Read `AGENTS.md`, `knowledge/index.md`, `knowledge/lesson-cores.md`, and
+`knowledge/performance-labs.md`. Start the `trinkets-work-log` skill. Then read
+the lesson itself: `core/core.go` or `core.ts`, `main.go` or `main.ts`,
+`analyze.sql`, and the current `measurements.csv`. Write these five lines into
+the work log before designing anything; every later choice is checked against
+them.
 
-Adding the adapter and extracting shared logic are authorized by this workflow.
-If you find a defect in the learner's existing code, follow `AGENTS.md`: explain
-the location, cause, and concept, and wait for explicit permission to fix that
-defect. Do not silently solve it while extracting functions or adding concurrency.
-Correct defects introduced in your own scaffolding. If a base defect blocks the
-experiment, finish independent scaffolding and explain the blocker.
+- **Contrast:** the variants the runner compares, using the names from its
+  variants or strategies table (`sequential` vs `pipeline`, `naive` vs
+  `idempotent`, `for update` vs `skip locked`, `WAL` vs `DELETE`). A lesson
+  with one mechanism has a knob instead (TTL, batch size, work time); say so.
+- **Invariant:** the condition the runner panics on, and the two numbers it
+  compares (stored sum vs batch size, counter total vs unique events).
+- **Question:** what the last query in `analyze.sql` computes (a ratio of
+  medians, an overcount, a p95 by mode). This is the number the k6 analysis
+  must reproduce.
+- **Knob:** the constant in the runner a learner would change next.
+- **Baseline:** the base lesson's own numbers from `measurements.csv`, so the
+  prediction prompt can ask "the base lesson measured X; what happens at
+  N per second with M in flight?"
 
-## Wrap one operation
+State one hypothesis in those terms: under concurrent traffic, the contrast
+still shows the question's answer, and the invariant holds. If the lesson's
+code has a defect, follow `AGENTS.md`: explain the location, cause, and
+concept, and wait for permission. Build everything that does not depend on
+the fix, and say what is blocked.
 
-- The current Go lessons already expose importable `core/` packages; the Deno
-  lesson exposes `createOperations` from `core.ts`. Use those entry points first.
-  Extract additional logic only when the selected operation is still coupled to
-  a runner. Importing `main.ts` executes setup, resets, and experiments; a server
-  must import `core.ts` instead.
-- Reuse the core operation in the original runner and HTTP handler. Preserve the
-  original run/analyze commands and measured behavior. Keep fixtures, destructive
-  resets, experiment loops, and report generation outside request handling.
-- Prefer Go `net/http` or `Deno.serve`, a localhost listener with configurable
-  port, a readiness route, and one meaningful operation route. Use meaningful
-  HTTP statuses, bounded inputs, request timeouts, and orderly shutdown.
-- Create clients/pools once, close them on shutdown, and use concurrency-safe
-  access. A sequential lesson's single connection or CSV writer may need a small
-  server-specific adapter. Avoid a global lock that accidentally serializes the
-  measured operation. Keep business semantics explicit.
-- For Go, use a small server entry point importing the existing core, or an
-  opt-in serve mode that branches before the runner's fixture setup. Keep the
-  existing `main.go` so Make still discovers the lesson. For Deno, add a small
-  server entry point that constructs `createOperations` with its own clients.
-  The server owns schema/bucket initialization and client shutdown explicitly.
-- Map core outcomes deliberately: counter `total` is meaningful only when
-  `applied` is true; queue `pgx.ErrNoRows` means no job was claimed; SQLite's
-  `WriteErr` is a measured write failure distinct from setup errors. Deno's
-  simulated crash returns early without throwing. Use these contracts when
-  designing responses and k6 checks; do not report a skipped operation as a
-  completed one. See `knowledge/lesson-cores.md` for concurrency and scope limits.
-- Use lesson-owned test data and an explicit bounded seed/reset command. Never
-  clean an entire backing service to prepare a performance run. State whether
-  each profile expects a warm cache, cold cache, or fresh queue.
-- Measure one domain signal when it explains the hypothesis: cache misses,
-  completed jobs, duplicate applications, or repair backlog. For asynchronous
-  work, distinguish HTTP acceptance from completion; include a bounded drain and
-  final invariant check. Do not claim job completion latency from submission
-  response times. Add a tiny domain CSV only if necessary for the experiment.
+## 2. Put the contrast inside one run
 
-## Build a small local workload
+The base lesson's table has one row per variant. The k6 analysis must too.
+Decide how the contrast reaches the server:
 
-Keep the workload in `perf/k6.ts` under the lesson. k6 runs TypeScript itself;
-the root `deno.json` maps `k6`, `k6/http`, `k6/execution`, `k6/metrics`, and
-`k6/options` to `@types/k6` so `deno check .` type-checks workloads without
-running them. Add a mapping there before importing another k6 module.
-Reuse `scripts/perf/workload.ts` for profiles and `scripts/perf/run.ts` for the
-local server/run/analyze lifecycle. Existing `perf/` examples show the small
-lesson-specific adapter, workload, SQL, and walkthrough. Extend these helpers
-only when needed by the new lesson; do not create a second runner. Declare the
-adapter.s response shapes as interfaces and pass them to `assertResponse<T>`
-and `stats<T>`; keep `perf/results/` excluded from Deno.
-Use one script with a validated `PROFILE` selection, defaulting to smoke.
-Include these selectable profiles with configurable, conservative local rates:
+- **Per-request variant** (the variant is a function or strategy choice the
+  core exposes: increment mode, counter strategy, crash flag). Expose it as a
+  validated request parameter, `POST /operation?variant=<name>`, answering 400
+  for any name the core does not export. The workload alternates variants
+  across iterations, so both receive the same arrival share under the same
+  conditions, and tags each request with `variant`. k6 writes custom tags to
+  the CSV `extra_tags` column as `variant=<name>`, which the lesson SQL
+  extracts. One run then yields the base lesson's comparison table.
+- **Server-level setting** (the variant is fixed at startup: journal mode,
+  pool size, TTL, worker count). Read it with `perf.Choice` or `perf.Int`, so
+  `GET /health` reports it and the run's `settings.json` records it. The lesson
+  SQL prints those settings as its first table, and the walkthrough's default
+  is a pair of runs, one per value, with the exact numbers to compare named.
+  Never let a silent default mode stand in for the comparison.
 
-| Profile | Suggested duration | Learning question |
-|---|---|---|
-| smoke | 10–20 seconds, one virtual user | Are the requests and correctness checks valid? |
-| load | 60 seconds at a steady arrival rate | Does the system keep up with the chosen demand? |
-| stress | 2–3 minutes, increasing rate with holds | Where do latency, failures, or backlog rise? |
-| spike | 60–90 seconds, low/burst/low | How does it recover after a sudden burst? |
-| soak | 5 minutes by default, duration configurable | Does a chosen signal drift during sustained use? |
+When a per-request variant is possible, prefer it: the same run, the same
+minute, the same background load. Use the server-level route only when the
+core cannot switch per call. A knob-only lesson uses the server-level route
+with two values of the knob.
 
-Call the short soak a practice run; offer 30–60 minutes as an optional extension.
-Run smoke plus one hypothesis-relevant profile in the default walkthrough.
-Keep total default load generation under five minutes. Do not automatically run
-every profile or a long soak. Do not manufacture overload by silently increasing
-load until the machine freezes: bound virtual users, requests, payloads, fixture
-growth, and duration. Report if the chosen range did not reach saturation.
+The shared `request` helper in `scripts/perf/workload.ts` fixes the request
+name to `operation`; extend it to accept extra tags that merge with that name
+rather than writing a second helper. Keep `name: operation` on every
+measured request so the shared SQL still excludes stats and repair traffic.
 
-Use arrival-rate executors for rate experiments. Explain iterations/second and
-requests/second separately if one iteration makes multiple requests. Preallocate
-adequate virtual users, set a finite maximum, and report dropped iterations.
-Use short transitions and explicit holds for a spike; a long ramp is a different
-experiment. Rate overrides must reject invalid values before traffic starts.
+## 3. Wrap the core, not the runner
 
-Check the expected status and a meaningful response invariant. Configure expected
-statuses consistently with failure metrics. Add thresholds for correctness and
-clearly labelled, configurable latency/error budgets; checks alone do not fail a
-k6 run. Stress may deliberately exceed a budget: retain the failure and explain
-it rather than weakening the threshold to make it pass. Use stable request names
-so polling/setup traffic can be excluded from operation measurements.
+- Import the existing `core/` package or `core.ts`; `knowledge/lesson-cores.md`
+  lists each entry point and its result contract. Extract more only if the
+  chosen operation is still coupled to the runner, and then reuse it in the
+  runner too. Importing a `main.ts` executes the experiment; a server never does.
+- The adapter owns clients (created once, closed on shutdown), a unique
+  fixture per server (private schema, key prefix, temporary database), and
+  readiness. Fixture resets, experiment loops, CSV, and panics on dependency
+  errors stay out of request handlers. Use the Go helpers in
+  `internal/lab/perf` or the Deno lab helpers; never a second lifecycle.
+- `POST /operation` calls the core once per request with bounded, validated
+  inputs and returns what the core returned, plus the variant that served it.
+  If the base runner timed the core call, time it the same way here and
+  return it as `elapsed_ms`: the analysis can then show the lesson's own
+  measurement beside HTTP latency and the learner sees what HTTP adds.
+- `GET /stats` returns the invariant's two numbers, not a boolean, per variant
+  when state is per variant (`expected_sum` and `actual_sum`; `total` and
+  `seen`). The runner saves this as `domain.json`; the lesson SQL and the
+  teardown check both read the comparison from it.
+- Map core outcomes honestly: a skipped duplicate is not an applied one, an
+  empty queue is not a completed job, a simulated crash is an experiment
+  outcome in a 200 response, a measured write failure is not a setup error.
+  Use meaningful statuses, request timeouts, and orderly shutdown.
 
-## Keep analysis lightweight
+## 4. Build the workload around the variants
 
-Read [k6-duckdb.md](references/k6-duckdb.md) when generating the analysis.
-Default to native k6 CSV output and the shared `scripts/perf/analyze.sql`,
-which already reports operation latency, failures, dropped iterations, time
-buckets, and every custom metric the workload emits. Add a lesson
-`perf/analyze.sql` only for a query that file cannot express; the runner
-appends it. Keep the original lesson's `measurements.csv` and `analyze.sql`
-separate. No metrics database, dashboard server, or conversion pipeline is needed.
+`perf/k6.ts` re-exports `options` and `handleSummary` from
+`scripts/perf/workload.ts` and adds only the lesson. Declare the adapter's
+response shapes as interfaces and pass them to `assertResponse<T>` and
+`stats<T>`.
 
-Keep run artifacts in an ignored `perf/results/<run-id>/` directory. Workload options come from
-`k6 inspect`; server settings come from the adapter's `GET /health`, which the
-Go helpers `perf.Int` and `perf.Choice` fill automatically, so never restate
-adapter defaults in the runner. Make the working directory and input
-path unambiguous in runnable commands. If using a runner, preserve k6's exit code
-while still permitting analysis of failed runs, and clean up only its own server.
-The Makefile discovers `perf/k6.ts` and adds `serve-`, `k6-`, `analyze-k6-`, and
-`lab-k6-` targets. Prefer private per-server schemas and unique cache/object keys
-as in the existing adapters. Record effective workload options with
-`k6 inspect --include-system-env-vars` so environment-selected profiles are saved.
-Lesson `k6.ts` files re-export `options` and `handleSummary` from
-`scripts/perf/workload.ts` and add only the operation and invariants.
+- The default function picks the variant for this iteration (round-robin over
+  the core's names, or `exec.scenario.iterationInTest % n`), sends the request
+  tagged with it, and checks the status and the invariant the base runner
+  checks per call.
+- Record the lesson's domain signal as a custom metric **tagged by variant**:
+  a `Trend` of the server's `elapsed_ms`, a `Rate` of cache misses or applied
+  duplicates, a `Counter` of increments. Tagging is what lets the analysis
+  split it; an untagged metric only reports a blended mean.
+- `teardown` reads `/stats` and asserts the lesson's invariant on the numbers.
+  For asynchronous work, drain with a bounded wait first and do not report
+  submission latency as completion latency.
+- Profiles come from `workload.ts`: `smoke` (one user, ten seconds), `load`
+  (steady arrival rate, sixty seconds), `stress` (stepped rate with holds),
+  `spike` (burst and recovery), `soak` (five-minute practice run, longer by
+  `DURATION_S`). Choose the default `RATE` so the slower variant sits below
+  saturation at `load` and say so; the learner raises it to find the knee.
+  Arrival-rate executors report dropped iterations; keep that threshold.
+- Thresholds: checks must all pass, operation failure rate under one percent,
+  and a labelled p95 budget. Stress may exceed the budget on purpose: keep the
+  failure and explain it. Rate and profile overrides fail before traffic.
 
-If useful DuckDB analysis would require substantial telemetry plumbing, keep the
-client CSV summary and explain its limits. Defer richer correlation. If DuckDB
-is unavailable, still provide the SQL and installation guidance; identify the
-analysis as unexecuted instead of replacing missing results with invented data.
+## 5. Make the analysis answer the lesson's question
 
-## Deliver and verify
+`scripts/perf/analyze.sql` is the shared floor: latency by scenario and
+status, failure rate, dropped iterations, request count, ten-second buckets,
+and every custom metric. The runner appends the lesson's `perf/analyze.sql`
+after it. That file is required here, and it holds the lesson:
 
-Provide a short `perf/README.md` with:
+1. **Settings header:** `select fixtures, unnest(server) from
+   read_json('settings.json')`, so the run's mode and knobs print above the
+   numbers.
+2. **The base table, by variant:** the same columns as the base `analyze.sql`
+   where they mean the same thing (`p50_batch_ms`, `overcount`, `p95_ms`),
+   computed from k6 samples grouped by the `variant` extracted from
+   `extra_tags`. Show the server's `elapsed_ms` trend beside
+   `http_req_duration` when the adapter returns it.
+3. **The question:** the lesson's final number in the named-group form
+   (`median(x) filter (where variant = 'a')` beside the same for `b`, then
+   the ratio), so a mistyped variant name is visible as a NULL beside a value.
+4. **The invariant:** `expected` and `actual` from `read_json('domain.json')`
+   with their difference, per variant when the server reports it that way.
 
-1. The hypothesis and a prediction prompt.
-2. Exact commands to start dependencies, seed, serve, run smoke and one selected
-   profile, analyze, and stop; give their working directories. Reuse repository
-   Make targets where available, adding only small explicit targets if helpful.
-3. A plain-language description and runnable command for each optional profile.
-4. Three interpretation questions and one knob to change for a second run.
-5. Which measurements describe HTTP, which describe domain work, and what this
-   local experiment cannot establish about production capacity or long uptime.
+Read [k6-duckdb.md](references/k6-duckdb.md) for the CSV shape, the tag
+extraction, and the JSON reads. Filter by `metric_name` and `name` before
+counting; never divide percentiles across buckets; keep failed requests
+visible. Keep the base lesson's `measurements.csv` and `analyze.sql` untouched.
 
-Check available tools before installing anything. Run a focused build/type check,
-readiness check, and smoke profile against isolated lesson data. Run the SQL over
-the resulting CSV and confirm its counts agree with the k6 summary, allowing for
-documented filters. Exercise one short comparison if needed to substantiate the
-chosen signal. Verify the original lesson entry path is preserved; run it when
-its fixture effects are safe. Do not claim an unrun command passed.
+## 6. Write the walkthrough in the lesson's own terms
 
-Finish with changed files, exact next commands, observed results, and any blocked
-validation. Explain the hypothesis without claiming unmeasured outcomes. Follow
-the repository knowledge workflow. Keep the learner's reading focused on the
-handler, the workload scenario, and the analysis; avoid a generalized framework.
+`perf/README.md` is a 10–20 minute session. Put the hypothesis first, then a
+prediction prompt that quotes the baseline: "the base lesson measured 33 ms
+sequential and 0.3 ms pipelined for one batch; write down your guess for each
+at five batches per second." Then:
+
+- Exact commands from the repository root: start services, the default run
+  (smoke plus the one profile that answers the question, or the pair of
+  server-level runs), and `analyze-k6-<lesson>` to repeat the SQL.
+- Which table to look at first and which two numbers to compare, by the
+  column names the SQL prints.
+- One line per optional profile: what question it asks for this lesson, and
+  its command. Do not run them all by default; keep default traffic under
+  five minutes.
+- Three interpretation questions that only this lesson can raise, and one
+  knob for a second run with a predicted direction.
+- Which measurements describe HTTP, which describe the domain, and what a
+  laptop over loopback cannot establish about production capacity or uptime.
+
+## 7. Verify against the lesson, then report
+
+Check tools before installing anything (`k6`, `duckdb`, `go`, `deno`). Run:
+
+- `make check`; `k6 inspect` on the workload; an invalid `PROFILE` must fail
+  before traffic.
+- `make lab-k6-<lesson>` smoke: every variant appears in the by-variant table
+  with a plausible share of the requests; the per-variant counts sum to the
+  shared operation count; the invariant table shows expected equal to actual;
+  the custom metric splits by variant.
+- The profile the walkthrough recommends, at its default rate, short enough
+  to stay in budget (`DURATION_S`). Confirm the question's number has the same
+  direction as the base lesson and note how far it moved.
+- The base lesson (`make lab-<lesson>`) still runs when its fixtures are safe,
+  and no server fixture (schema, keys, temporary file) remains afterwards.
+
+Report the files changed, the exact next commands, the observed by-variant
+numbers, which profiles were not run, and anything unexplained (a gap between
+HTTP and core latency, a variant nearer saturation than expected). Then run
+`update-trinkets-knowledge` (add the core row to `lesson-cores.md` and the
+verification to `performance-labs.md`) and close the work log.
+
+## Mechanics already in place
+
+Read `knowledge/performance-labs.md` for detail; in brief:
+
+- The Makefile discovers `lessons/*/*/perf/k6.ts` and adds `serve-`, `k6-`,
+  `analyze-k6-`, and `lab-k6-` targets. Keep the base `main.go` or `main.ts`
+  so lesson discovery still works; a Go adapter is `perf/main.go`, a Deno one
+  `perf/server.ts`.
+- `scripts/perf/run.ts` builds or starts the server, waits for its URL, runs
+  k6 with CSV output, saves `settings.json` (from `/health`), `workload.json`
+  (from `k6 inspect --include-system-env-vars`), `domain.json` (from
+  `/stats`), and logs into `perf/results/<run-id>/`, runs the shared then the
+  lesson SQL, and stops its own server. It keeps k6's exit status.
+- The root `deno.json` maps `k6`, `k6/http`, `k6/execution`, `k6/metrics`, and
+  `k6/options` to `@types/k6`; add a mapping before importing another module.
+  `perf/results/` is excluded from `deno check`.
+- Never clean a whole backing service to reset an experiment; fixtures are
+  per server and cleaned on normal shutdown.
