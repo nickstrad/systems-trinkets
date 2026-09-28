@@ -80,11 +80,13 @@ async function analyze(lesson: string, output: string): Promise<number> {
   return (await duckdb.status).code;
 }
 
+// latestRun picks the newest run that produced metrics; a run that failed
+// before traffic keeps its directory (and server.log) but is not analyzable.
 function latestRun(results: string): string {
   const runs = exists(results)
-    ? [...Deno.readDirSync(results)].filter((e) => e.isDirectory).map((e) =>
-      e.name
-    ).sort()
+    ? [...Deno.readDirSync(results)].filter((e) =>
+      e.isDirectory && exists(path.join(results, e.name, "metrics.csv"))
+    ).map((e) => e.name).sort()
     : [];
   if (runs.length === 0) throw new Failure(`no runs to analyze in ${results}`);
   return path.join(results, runs.at(-1)!); // run ids start with a timestamp
