@@ -1,0 +1,108 @@
+Create one 20-minute, hands-on systems-engineering lesson that I will type into my existing systems-trinkets repository. Use the repository context below as the integration contract; you do not need access to the repository. Produce the lesson itself, with complete runnable code, rather than a proposal.
+
+SPIRIT AND SCOPE
+
+Build one small system around one useful, common systems concept. Choose exactly one main systems property to teach, such as reliability, durability, latency, availability, or consistency. State a concrete question and an observable invariant or outcome that will answer it. Prefer a small controlled experiment, with a baseline and one changed mechanism when useful. Keep the typing, running, and analysis realistic for about 10 minutes; simplify the experiment if necessary.
+
+Use Go or TypeScript with Deno. Choose one or at most two primary storage systems from PostgreSQL, DuckDB, Redis/Valkey, and SeaweedFS. Choose storage to fit the problem. Use PostgreSQL when a relational database is needed; Valkey-only and object-storage-only systems are welcome. Never use SQLite in this series, even though the repository contains an older SQLite lesson: I have a separate SQLite daily lesson. Always use DuckDB to analyze measurements; analysis-only DuckDB does not count toward the primary storage limit.
+
+Vary the language, primary storage, architecture, mechanism, and measured property across lessons visible in this conversation. Existing topics include cache-aside, a PostgreSQL job queue, an idempotent completed-job counter, and cross-store failure/reconciliation. Favor fresh topics or clearly explain the new angle. Do not claim knowledge of lessons outside the supplied context. Use AI cloud environments as north star for projects. For example, think of lessons that would help someone building platforms like daytona, e2b, vercel sandbox, ingest, temporal, vercel workflows. If it doesn’t make the lessons too big, feel free to add lessons using firecracker VM (just assumed /kvm Linux OS exists), kata container (just state dependencies), or other AI sandbox related technology into the lessons.
+
+REPOSITORY LAYOUT AND COMMANDS
+
+Choose a short, descriptive, lowercase kebab-case slug, unique across both runtimes. It becomes the directory name and Make target suffix. There are no lesson numbers in directory names.
+
+For Go, provide these files:
+  lessons/go/<slug>/main.go
+  lessons/go/<slug>/core/core.go
+  lessons/go/<slug>/analyze.sql
+
+For Deno, provide these files:
+  lessons/deno/<slug>/main.ts
+  lessons/deno/<slug>/core.ts
+  lessons/deno/<slug>/analyze.sql
+
+Use only additional files essential to the concept. The repo has one root Go module, github.com/nickstrad/systems-trinkets, and one Deno workspace with lessons/deno/deno.json as its member import map. Do not create per-lesson go.mod, deno.json, lockfiles, Docker Compose files, or Makefiles. Prefer installed drivers; if a new dependency is essential, explicitly identify the shared dependency change instead of assuming an invented helper or import alias exists.
+
+All Make commands are issued from the repo root. New main.go/main.ts files are discovered automatically; no Makefile edit is needed:
+  make run-<slug>       runs the experiment
+  make analyze-<slug>   runs DuckDB over analyze.sql
+  make lab-<slug>       runs the experiment and then the analysis
+The recipes change into the lesson directory before running go run . or deno run -A main.ts, and duckdb < analyze.sql. Write measurements.csv in that directory, overwriting the previous experiment's CSV. Analyze it using relative paths. Include concrete commands with the chosen slug, not placeholders. Tools and existing dependencies are already installed.
+
+Start only required services with make up-postgres, make up-valkey, and/or make up-seaweedfs. DuckDB needs no service. Local defaults are:
+  PostgreSQL: postgres://trinkets:trinkets@localhost:5432/trinkets
+  Valkey: redis://localhost:6379 (no authentication)
+  SeaweedFS S3: http://localhost:8333, access key trinkets, secret key trinkets-secret, region us-east-1, path-style addressing
+Helpers honor DATABASE_URL, CACHE_URL, and OBJECT_STORE_URL respectively. Whenever connection details are shown, include the full applicable credentials; these are fixed local development credentials.
+
+EXISTING HELPERS: IMPORT THEM, DO NOT REIMPLEMENT THEM
+
+Go imports use github.com/nickstrad/systems-trinkets/internal/lab and its subpackages:
+  lab.Env(key, fallback string) string
+  lab.Check(err error)                         // panics on non-nil error; runner only
+  lab.Ms(duration time.Duration) float64
+  lab.NewMeasurements(columns ...string) *lab.Measurements
+  measurements.Write(fields ...string)        // format numbers/bools into strings yourself
+  measurements.Close()                        // flushes, closes, prints file name
+  postgres.URL() string
+  postgres.Connect(ctx context.Context) *pgx.Conn
+  valkey.URL() string
+  valkey.Connect(ctx context.Context) *redis.Client
+The driver packages are github.com/jackc/pgx/v5 and github.com/redis/go-redis/v9. Connect takes only a context, uses the environment/default URL, and fails fast on errors. Valkey Connect also pings. The runner owns closing clients. There is no shared Go SeaweedFS helper; choose Deno for a compact S3 lesson or explicitly supply the necessary Go client setup. Import the new Go core as github.com/nickstrad/systems-trinkets/lessons/go/<slug>/core.
+
+Deno uses these existing imports and APIs:
+  import { env, sleep, mapConcurrent, Measurements } from "lab/lab.ts";
+  env(key: string, fallback: string): string
+  sleep(ms: number): Promise<void>
+  mapConcurrent(items, limit, asyncFn): Promise<results[]> // bounded, preserves input order
+  new Measurements(...columns: string[])                 // writes CSV header
+  measurements.write(...fields: (string | number)[])
+  measurements.close()
+  import * as postgres from "lab/postgres.ts";
+  postgres.url(): string
+  await postgres.connect()                 // connected node-postgres Client
+  postgres.pool(max, options?)             // lazy pg.Pool; options is a startup-options string
+  import * as valkey from "lab/valkey.ts";
+  valkey.url(): string
+  await valkey.connect()                   // connected and pinged node-redis client
+  import * as seaweedfs from "lab/seaweedfs.ts";
+  seaweedfs.url(): string
+  seaweedfs.connect()                      // synchronous S3Client factory
+  await seaweedfs.ensureBucket(s3, bucket)
+  await seaweedfs.listObjects(s3, bucket, prefix) // { key, lastModified: Date }[]
+  await seaweedfs.listKeys(s3, bucket, prefix)    // string[]
+  await seaweedfs.exists(s3, bucket, key)        // boolean
+  await seaweedfs.deleteKeys(s3, bucket, keys)
+Import only what the lesson uses. The shared import map supplies "pg", "redis", and "@aws-sdk/client-s3". The postgres helper already supplies pg types; direct imports from "pg" need // @ts-types="npm:@types/pg@^8" immediately above the import. Use top-level await in main.ts, import the core from "./core.ts", and close resources in finally. Deno timing can use performance.now(), which returns milliseconds.
+
+CORE AND EXPERIMENT: KEEP THE FUTURE k6 ADAPTER EASY
+
+The standalone lesson must finish and teach its concept with make lab-<slug>, without an HTTP server or k6. Separate only the reusable operation from its small experiment runner:
+  - core/core.go uses package core; core.ts exports functions or a small factory. Export shared DDL as Schema (Go) or schema (Deno) when needed.
+  - The core accepts caller-owned clients and explicit inputs/settings, performs the actual storage operation, and returns a small useful result plus errors. Distinguish expected outcomes (duplicate, miss, empty queue, injected failure) from unexpected dependency errors. Define which returned fields are meaningful for each outcome.
+  - The runner owns connections, creating/seeding/resetting fixtures, experiment loops, timing, invariant checks, console output, CSV writing, and cleanup. Importing the core must not connect, execute the experiment, or change storage. Core operations must not reset fixtures, print, write CSV, or terminate the process.
+  - Keep transactions inside the operation when they express the mechanism. In Go, a small interface matching the required pgx methods can allow either a connection or pool. In Deno, keep each transaction on one checked-out client. Concurrent transactions require separate connections; never share one active transaction across concurrent calls.
+  - Use lesson-specific tables, keys, and object prefixes. Reset only this lesson's fixtures. Make key/prefix construction reusable where the adapter will need it. Avoid global mutable experiment state or assumptions that IDs arrive sequentially. Keep concurrency and fixture growth bounded. No service-wide flushes or volume deletion.
+Use ordinary functions and minimal types; do not build a framework. Preserve the real mechanism when making it reusable: a later HTTP request should call a single operation or explicitly defined unit of work, not rerun main or reset the whole experiment.
+
+MEASURE AND EXPLAIN
+
+Measure one meaningful property tied to the lesson's question, with any supporting columns needed to interpret it. Record units, variant/mode, operation identity, and outcome where relevant. Check a domain invariant in addition to reporting timing: fast but incorrect is not success. Fail on unexpected setup or dependency errors; record deliberate failure scenarios explicitly.
+
+State what the measurement includes and excludes. Keep fixture setup and CSV writes outside timed regions. Warm up when measuring steady-state latency, then restore the intended starting state; if cold-start behavior is the subject, label it explicitly. For concurrency lessons, use a controlled overlap rather than relying solely on lucky scheduling. Distinguish a simulated interruption from a real process/storage crash and avoid claiming durability guarantees the experiment does not test.
+
+Provide analyze.sql with two or three short DuckDB queries that read measurements.csv and answer the question. Explain each result briefly, including expected relationships or invariants. Label illustrative output as illustrative; do not invent measured results or claim code was tested. Small local runs demonstrate a mechanism, not production capacity.
+
+OUTPUT ORDER
+
+1. Title, chosen slug, language, primary stores, main property, and a brief problem overview with the experiment's question.
+2. A terminal-readable text-art architecture diagram showing the operation and storage path, plus measurement export to DuckDB.
+3. The small file tree and complete contents of each required file, with exact repo-relative paths. Explain the key mechanism briefly. No ellipses, TODOs, or missing core code.
+4. Exact service startup and make lab-<slug> commands, then how to read the DuckDB results. The SQL belongs in analyze.sql, not only in prose.
+5. A short "Later k6 follow-up" handoff: name the callable operation, propose one HTTP operation and its JSON result/invariant, one workload, and one knob to vary. State whether request completion means accepted, committed, or fully processed. Explain how fixtures/IDs would be isolated and what correctness must still hold under concurrent requests. If HTTP timing misses the main property, name the domain metric or final-state check needed as well.
+6. End with what was intentionally skipped for brevity.
+
+Keep the k6 handoff to a short paragraph or a few bullets; do not generate the adapter or workload in the daily lesson. The repo adds those after the base lesson is complete: perf/main.go or perf/server.ts calls the same core; perf/k6.ts runs under k6 (not Deno). Shared internal/lab/perf, scripts/perf/run.ts, scripts/perf/workload.ts, and scripts/perf/analyze.sql already handle much of the lifecycle, workload, artifacts, and analysis. A future adapter exposes GET /health with effective settings, GET /stats with domain state, and its operation endpoint, using isolated fixtures. Once those files exist, Make discovers serve-<slug>, k6-<slug>, analyze-k6-<slug>, and lab-k6-<slug>. Do not present those as runnable commands for the base lesson. The local follow-up can be requested with $add-basic-k6-testing and the completed lesson path.
+
+End with what was intentionally skipped for brevity.
