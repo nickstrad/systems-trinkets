@@ -3,7 +3,7 @@
 // Postgres does not load the pg driver.
 // pg ships no types; this directive gives every lesson a typed Client.
 // @ts-types="npm:@types/pg@^8"
-import { Client } from "pg";
+import { Client, Pool } from "pg";
 import { env } from "lab/lab.ts";
 
 /**
@@ -29,4 +29,14 @@ export async function connect(): Promise<Client> {
   const client = new Client({ connectionString: url() });
   await client.connect();
   return client;
+}
+
+/**
+ * pool opens up to max connections to url() lazily. options are Postgres
+ * startup parameters applied to every connection, e.g.
+ * "-c search_path=perf_x -c statement_timeout=5000", so pooled connections
+ * never need a separate `set` round trip. Callers end() it on shutdown.
+ */
+export function pool(max: number, options?: string): Pool {
+  return new Pool({ connectionString: url(), max, options });
 }

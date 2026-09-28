@@ -8,6 +8,13 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// Schema creates the counter and seen-event tables Apply uses. It is
+// idempotent; callers own truncating and seeding the counter rows.
+const Schema = `
+	create table if not exists job_counter(mode text primary key, total integer not null default 0);
+	create table if not exists job_seen(event_id integer primary key);
+`
+
 // Beginner accepts a connection for the lesson or a pool for concurrent callers.
 type Beginner interface {
 	Begin(context.Context) (pgx.Tx, error)

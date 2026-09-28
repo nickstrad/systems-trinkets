@@ -10,6 +10,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// Schema creates the profiles table ReadProfile reads. Callers own dropping
+// it and seeding a profile; the lesson runner and the perf adapter share it.
+const Schema = `create table cache_aside_profiles(id bigint primary key, name text not null)`
+
 // Querier accepts a pgx connection or pool. Concurrent callers should use a pool.
 type Querier interface {
 	QueryRow(context.Context, string, ...any) pgx.Row

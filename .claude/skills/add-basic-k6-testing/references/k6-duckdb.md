@@ -3,7 +3,7 @@
 Generate the lesson's SQL from real smoke output. k6 CSV contains multiple metric
 samples per request, not a request table. Filter by `metric_name` before counting
 or aggregating. Inspect the actual header and preserve the needed system tags.
-The native output command is `k6 run --out csv=metrics.csv script.js`.
+The native output command is `k6 run --out csv=metrics.csv script.ts`.
 [CSV output documentation](https://grafana.com/docs/k6/latest/results-output/real-time/csv/)
 
 Prefer one output directory per run. The following SQL assumes it is executed

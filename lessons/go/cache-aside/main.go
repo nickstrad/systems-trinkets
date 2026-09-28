@@ -28,14 +28,7 @@ func main() {
 	cache := valkey.Connect(ctx)
 	defer cache.Close()
 
-	_, err := pg.Exec(ctx, `
-		drop table if exists cache_aside_profiles;
-
-		create table cache_aside_profiles(
-			id bigint primary key,
-			name text not null
-		);
-	`)
+	_, err := pg.Exec(ctx, `drop table if exists cache_aside_profiles; `+core.Schema)
 	lab.Check(err)
 	_, err = pg.Exec(ctx,
 		`insert into cache_aside_profiles(id, name) values ($1, 'Ada')`,

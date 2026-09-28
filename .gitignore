@@ -41,5 +41,8 @@ go.work.sum
 # agent work logs (see trinkets-work-log skill)
 /.state/
 
+# Local HTTP/k6 runs: binaries, logs, raw metrics, and summaries.
+/lessons/*/*/perf/results/
+
 # vim swap files
 *.swp

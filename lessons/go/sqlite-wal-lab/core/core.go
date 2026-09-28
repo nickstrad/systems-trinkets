@@ -4,8 +4,24 @@ package core
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 )
+
+// DSN builds the modernc DSN for path. Pragmas in the DSN run on every
+// connection the pool opens; with db.Exec they would reach only whichever
+// pooled connection ran them. mode is the journal_mode (WAL or DELETE) and
+// busyTimeoutMs how long a writer waits for a lock before failing.
+func DSN(path, mode string, busyTimeoutMs int) string {
+	return fmt.Sprintf("file:%s?_pragma=busy_timeout(%d)&_pragma=journal_mode(%s)", path, busyTimeoutMs, mode)
+}
+
+// Schema creates the events table and its seed row, so OpenSnapshot has a
+// row to read. Callers own the database file and its lifetime.
+const Schema = `
+	create table events(id integer primary key, payload text);
+	insert into events(payload) values ('seed');
+`
 
 // OpenSnapshot opens a read transaction and performs the read that establishes
 // its snapshot. The caller must Rollback the returned transaction to release it.

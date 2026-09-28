@@ -25,13 +25,17 @@ Keep these existing semantics in mind:
   the sequential runner carries forward its last observed total for reporting.
 - Queue `Claim.Took` measures the claim query, excluding simulated processing.
   An empty queue returns `pgx.ErrNoRows`. Processing retains the lesson's sleep.
-- SQLite callers own schema, driver registration, and per-connection pragmas.
-  Roll back the snapshot to release its connection. Allow a second connection
+- Every core exports its table DDL (`core.Schema`, or `schema` in Deno) so the
+  lesson runner and the perf adapter create identical tables; callers still own
+  dropping, truncating, and seeding. SQLite's `core.DSN(path, mode, busyMs)`
+  builds the modernc DSN with per-connection pragmas; callers own driver
+  registration. Roll back the snapshot to release its connection. Allow a second connection
   for the writer. A locked write is `WriteResult.WriteErr`, while connection or
   preparation failures use the function's returned error.
 - Deno core import and factory construction perform no I/O. The caller owns
-  client lifecycle and bucket/schema setup. Its fixed metadata `table` is
-  exported for setup; the supplied prefix scopes S3 listings, not metadata rows.
+  client lifecycle and bucket setup. Its fixed metadata `table` and the
+  `schema` that creates it are exported for setup; the supplied prefix scopes
+  S3 listings, not metadata rows.
   A simulated crash preserves the lesson's early return; it is not a thrown
   dependency failure. Reconciliation still follows the lesson's assumptions
   about in-flight work and grace windows.

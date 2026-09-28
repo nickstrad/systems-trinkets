@@ -49,21 +49,11 @@ func run(mode string, trial int) measurement {
 	lab.Check(err)
 	defer os.RemoveAll(dir)
 
-	// Pragmas in the DSN run on every connection the pool opens. With db.Exec
-	// they would reach only whichever pooled connection ran them.
-	dsn := "file:" + filepath.Join(dir, "events.db") +
-		"?_pragma=busy_timeout(2000)&_pragma=journal_mode(" + mode + ")"
-	db, err := sql.Open("sqlite", dsn)
+	db, err := sql.Open("sqlite", core.DSN(filepath.Join(dir, "events.db"), mode, 2000))
 	lab.Check(err)
 	defer db.Close()
 
-	_, err = db.ExecContext(ctx, `
-create table events (
-  id integer primary key,
-  payload text
-);
-insert into events(payload) values ('seed');
-`)
+	_, err = db.ExecContext(ctx, core.Schema)
 	lab.Check(err)
 
 	// Reading establishes a snapshot, held until the deferred rollback.

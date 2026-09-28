@@ -3,6 +3,10 @@
 #   make run-<lesson>     run the lesson from its directory; writes measurements.csv
 #   make analyze-<lesson> run its analyze.sql in DuckDB over measurements.csv
 #   make lab-<lesson>     both, in order
+#   make serve-<lesson>   HTTP adapter on localhost:8080; Ctrl-C stops it
+#   make k6-<lesson>      test a running adapter (PROFILE=smoke by default)
+#   make analyze-k6-<lesson> analyze the latest performance CSV with DuckDB
+#   make lab-k6-<lesson>  start adapter, run k6, analyze, and stop adapter
 #   make up-<service>     start in the background and wait until healthy
 #   make down-<service>   stop and remove containers, keep data
 #   make clean-<service>  stop and delete containers and data volumes
@@ -28,6 +32,7 @@ compose = docker compose -f $(compose_file_$(1))
 help:
 	@sed -n 's/^#   /  /p' Makefile
 	@echo "  lessons:  $(LESSONS)"
+	@echo "  k6:       $(notdir $(PERF_LESSONS))"
 	@echo "  services: $(SERVICES)"
 
 # Explicit per-lesson rules, for the same reason as the service rules below.
@@ -49,9 +54,28 @@ endef
 $(foreach l,$(GO_LESSONS),$(eval $(call lesson_rules,$(l),go)))
 $(foreach l,$(DENO_LESSONS),$(eval $(call lesson_rules,$(l),deno)))
 
+# Only lessons with a workload gain performance targets; run.ts picks the
+# runtime from the lesson directory. Settings such as PROFILE=load or MODE=blocking
+# reach the recipe from the make command line or the environment as-is.
+PERF_LESSONS := $(patsubst %/perf/k6.ts,%,$(wildcard lessons/*/*/perf/k6.ts))
+
+define perf_rules
+.PHONY: serve-$(2) k6-$(2) analyze-k6-$(2) lab-k6-$(2)
+serve-$(2):
+	deno run -A scripts/perf/run.ts serve $(1)
+k6-$(2):
+	deno run -A scripts/perf/run.ts run $(1)
+analyze-k6-$(2):
+	deno run -A scripts/perf/run.ts analyze $(1)
+lab-k6-$(2):
+	deno run -A scripts/perf/run.ts lab $(1)
+endef
+
+$(foreach p,$(PERF_LESSONS),$(eval $(call perf_rules,$(p),$(notdir $(p)))))
+
 check:
 	go vet ./...
-	cd lessons/deno && deno check .
+	deno check .
 
 ps:
 	@docker ps --filter "label=com.docker.compose.project" --format '{{.Label "com.docker.compose.project"}}\t{{.Status}}\t{{.Ports}}' | grep '^trinkets-' || echo "no trinkets services running"

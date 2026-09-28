@@ -25,7 +25,13 @@
 // The scoped repair wins only when few writes are in doubt.
 //
 // Needs: make up-postgres up-seaweedfs. Runs about half a minute.
-import { createOperations, type Mode, type State, table } from "./core.ts";
+import {
+  createOperations,
+  type Mode,
+  schema,
+  type State,
+  table,
+} from "./core.ts";
 import { mapConcurrent, Measurements, sleep } from "lab/lab.ts";
 import * as postgres from "lab/postgres.ts";
 import * as seaweedfs from "lab/seaweedfs.ts";
@@ -58,15 +64,7 @@ const { upload, measure, reconcileOrphans, repair } = createOperations({
   concurrency,
 });
 await seaweedfs.ensureBucket(s3, bucket);
-await pg.query(`
-  drop table if exists ${table};
-
-  create table ${table}(
-    object_key text primary key,
-    status text not null default 'committed',
-    created_at timestamptz not null default now()
-  );
-`);
+await pg.query(`drop table if exists ${table}; ${schema}`);
 
 const key = (id: number) => `${prefix}object-${id}.txt`;
 const range = (n: number) => Array.from({ length: n }, (_, i) => i);

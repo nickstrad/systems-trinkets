@@ -34,15 +34,7 @@ func main() {
 	db := postgres.Connect(ctx)
 	defer db.Close(ctx)
 
-	_, err := db.Exec(ctx, `
-		create table if not exists job_counter (
-			mode text primary key,
-			total integer not null default 0
-		);
-		create table if not exists job_seen (
-			event_id integer primary key
-		);
-	`)
+	_, err := db.Exec(ctx, core.Schema)
 	lab.Check(err)
 
 	// Run each strategy once before measuring so pgx has already prepared its

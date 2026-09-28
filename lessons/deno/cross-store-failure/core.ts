@@ -5,6 +5,12 @@ import type * as postgres from "lab/postgres.ts";
 import * as seaweedfs from "lab/seaweedfs.ts";
 
 export const table = "cross_store_failure_metadata";
+/** schema creates the metadata table; callers own dropping or truncating it. */
+export const schema = `create table ${table}(
+  object_key text primary key,
+  status text not null default 'committed',
+  created_at timestamptz not null default now()
+)`;
 export type Mode = "put_then_insert" | "insert_then_put" | "intent_then_put";
 
 export interface Dependencies {

@@ -50,13 +50,7 @@ func main() {
 		defer workers[i].Close(ctx)
 	}
 
-	_, err := admin.Exec(ctx, `
-		drop table if exists background_queue_jobs;
-		create table background_queue_jobs(
-			id bigserial primary key,
-			status text not null
-		);
-	`)
+	_, err := admin.Exec(ctx, `drop table if exists background_queue_jobs; `+core.Schema)
 	lab.Check(err)
 
 	// Run each mode once before measuring so pgx has already prepared its

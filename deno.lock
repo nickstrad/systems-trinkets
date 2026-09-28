@@ -2,6 +2,7 @@
   "version": "5",
   "specifiers": {
     "npm:@aws-sdk/client-s3@^3.1141.0": "3.1141.0",
+    "npm:@types/k6@2": "2.2.1",
     "npm:@types/pg@8": "8.23.1",
     "npm:pg@^8.23.0": "8.23.0",
     "npm:redis@5": "5.12.1"
@@ -282,6 +283,9 @@
         "tslib"
       ]
     },
+    "@types/k6@2.2.1": {
+      "integrity": "sha512-WgLxx6KgNSZq3KV3HnYYVvo5ZZSxyRz3q9B0byBAY8z6HuYWxcdOr69fRQuvadmUD2NkVVcbDMye8mF+2Wxx/A=="
+    },
     "@types/node@26.6.3": {
       "integrity": "sha512-dsqMQQoeTLqu9wynDD00q573mNzso3IdQOAfHRJqLCcmCFPoGo9A1bDpUcv/9tnKpErQWv9uKeGfl37EIS02Yg==",
       "dependencies": [
@@ -389,9 +393,16 @@
   },
   "workspace": {
     "dependencies": [
-      "npm:@aws-sdk/client-s3@^3.1141.0",
-      "npm:pg@^8.23.0",
-      "npm:redis@5"
-    ]
+      "npm:@types/k6@2"
+    ],
+    "members": {
+      "lessons/deno": {
+        "dependencies": [
+          "npm:@aws-sdk/client-s3@^3.1141.0",
+          "npm:pg@^8.23.0",
+          "npm:redis@5"
+        ]
+      }
+    }
   }
 }

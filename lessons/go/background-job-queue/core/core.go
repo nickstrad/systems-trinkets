@@ -9,6 +9,9 @@ import (
 )
 
 const (
+	// Schema creates the jobs table the queries below expect. Callers own
+	// dropping or truncating it; the lesson runner and the perf adapter share it.
+	Schema = `create table background_queue_jobs(id bigserial primary key, status text not null)`
 	// ClaimQuery locks the oldest pending job until the worker commits.
 	ClaimQuery = `select id from background_queue_jobs where status = 'pending' order by id limit 1 for update`
 	// SkipLockedQuery passes over jobs another transaction holds.
