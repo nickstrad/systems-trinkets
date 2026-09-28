@@ -37,6 +37,16 @@ func main() {
 	lab.Check(err)
 	lab.Check(cache.Del(ctx, core.ProfileKey(profileID)).Err())
 
+	// Take each path once before measuring: pgx prepares a statement on its
+	// first use and both connections are new, so an untimed miss and hit keep
+	// that one-time setup out of the only miss sample below. Deleting the key
+	// again makes the first timed request a real miss.
+	for range 2 {
+		_, _, err := core.ReadProfile(ctx, pg, cache, profileID, cacheTTL)
+		lab.Check(err)
+	}
+	lab.Check(cache.Del(ctx, core.ProfileKey(profileID)).Err())
+
 	out := lab.NewMeasurements("request", "source", "latency_us")
 
 	for i := range requests {
@@ -44,6 +54,9 @@ func main() {
 		name, source, err := core.ReadProfile(ctx, pg, cache, profileID, cacheTTL)
 		lab.Check(err)
 		elapsed := time.Since(start)
+		if name != "Ada" {
+			panic(fmt.Sprintf("invariant failed: request %d read %q from %s, want \"Ada\"", i, name, source))
+		}
 
 		fmt.Printf("request=%02d source=%-8s latency=%v name=%s\n", i, source, elapsed, name)
 
