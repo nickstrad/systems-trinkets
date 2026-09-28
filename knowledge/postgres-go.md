@@ -35,6 +35,16 @@ Applies when a lesson talks to the local Postgres with `github.com/jackc/pgx/v5`
   both modes.
 - **Read a changed value in the same round trip:** `update ... returning total`
   with `QueryRow(...).Scan`, and treat `pgx.ErrNoRows` as "row missing".
+- **Cast a parameter used in arithmetic with `generate_series`:**
+  `insert ... select $1 + g from generate_series(1, $2) g` infers int4 for
+  `$1`; a bigint base (the cache-aside perf adapter's random id base)
+  needs `$1::bigint` or the insert fails with an out-of-range error
+  (2026-09-28).
+- **Warm every pooled connection, and take the connection before the timer.**
+  pgx prepares per connection, and `pgxpool` dials lazily; `perf.Warm` runs
+  a statement on each connection at startup. When a core accepts a
+  `*pgxpool.Conn`, acquire it before `time.Now()` so a pool wait is not
+  inside the measured call (the perf adapters, 2026-09-28).
 
 Verified 2026-09-24: `completed-job-counter` ran end to end (naive total 300,
 idempotent 100) using these patterns.

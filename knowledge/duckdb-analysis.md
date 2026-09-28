@@ -47,6 +47,19 @@ first Deno lesson, `lessons/deno/cross-store-failure/analyze.sql`.
 Verified 2026-09-28: in `lessons/go/pipelining-work`, a mistyped group
 literal returned NULL for the aggregate and the ratio with no error.
 
+- **Alias reuse stops beside a scalar subquery.** A select that reuses an
+  earlier alias and also holds `(select ... from other)` raises a Binder
+  Error; move the subquery into a CTE and join it
+  (`lessons/go/background-job-queue/perf/analyze.sql`, 2026-09-28).
+- **`.print` cannot hold an apostrophe:** `'lesson''s'` prints `lesson s`;
+  the dot command splits on the quote instead of unescaping it. Reword.
+- **Nested JSON arrays:** `unnest(d.variants, recursive := true)` over
+  `read_json('domain.json') d` spreads `{variants: [{...}]}` into one row per
+  element with one column per field.
+- **Macros:** `create macro tag(extra, key) as regexp_extract(...)` in the
+  shared `scripts/perf/analyze.sql` keeps one regex for every lesson; the
+  lesson SQL appended after it can call it.
+
 ## Optional k6 follow-up
 
 Use [add-basic-k6-testing](../.claude/skills/add-basic-k6-testing/SKILL.md)

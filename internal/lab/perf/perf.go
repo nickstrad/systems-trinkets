@@ -80,6 +80,22 @@ func Database(ctx context.Context) (*pgxpool.Pool, func()) {
 	}
 }
 
+// Warm holds every connection the pool may open and runs fn on each, so a
+// statement pgx prepares per connection is prepared before the first timed
+// request rather than inside it. Callers reset any rows fn wrote afterwards.
+func Warm(ctx context.Context, pool *pgxpool.Pool, fn func(context.Context, *pgxpool.Conn) error) {
+	conns := make([]*pgxpool.Conn, pool.Config().MaxConns)
+	for i := range conns {
+		c, err := pool.Acquire(ctx)
+		lab.Check(err)
+		conns[i] = c
+		lab.Check(fn(ctx, c))
+	}
+	for _, c := range conns {
+		c.Release()
+	}
+}
+
 func JSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

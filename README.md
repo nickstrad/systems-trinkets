@@ -125,7 +125,7 @@ A typical session:
 make up-postgres up-valkey                       # 1. services the lesson needs
 make lab-k6-cache-aside                          # 2. smoke: are requests and checks valid?
 make lab-k6-cache-aside PROFILE=load             # 3. one hypothesis-relevant profile
-make lab-k6-cache-aside PROFILE=load CACHE_TTL_MS=100   # 4. change one knob, rerun
+make lab-k6-cache-aside PROFILE=load TTL_MS=3000   # 4. change one knob, rerun
 make analyze-k6-cache-aside                      # 5. re-read the latest run's tables
 ```
 

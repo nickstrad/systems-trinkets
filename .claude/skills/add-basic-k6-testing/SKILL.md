@@ -27,6 +27,14 @@ the lesson itself: `core/core.go` or `core.ts`, `main.go` or `main.ts`,
 the work log before designing anything; every later choice is checked against
 them.
 
+If the lesson has `K6_PLAN.md`, read it as the implementation brief. Follow
+its workload phases, metrics, isolation, and acceptance criteria after
+checking them against the actual core and measurements. Update stale parts
+of the plan when the base lesson has changed, explaining the adjustment.
+For lessons created with `$create-lesson`, keep the follow-up README focused
+on run commands and interpreting the comparison; an extended writeup is
+unnecessary.
+
 - **Contrast:** the variants the runner compares, using the names from its
   variants or strategies table (`sequential` vs `pipeline`, `naive` vs
   `idempotent`, `for update` vs `skip locked`, `WAL` vs `DELETE`). A lesson
@@ -72,10 +80,11 @@ minute, the same background load. Use the server-level route only when the
 core cannot switch per call. A knob-only lesson uses the server-level route
 with two values of the knob.
 
-The shared `request` helper in `scripts/perf/workload.ts` fixes the request
-name to `operation`; extend it to accept extra tags that merge with that name
-rather than writing a second helper. Keep `name: operation` on every
-measured request so the shared SQL still excludes stats and repair traffic.
+The shared `request(method, path, tags)` helper in `scripts/perf/workload.ts`
+merges extra tags with the fixed request name `operation`; `http.batch`
+callers take the same params from `operationParams(tags)`. Keep
+`name: operation` on every measured request so the shared SQL still excludes
+stats and repair traffic. Do not write a second request helper.
 
 ## 3. Wrap the core, not the runner
 
@@ -87,7 +96,14 @@ measured request so the shared SQL still excludes stats and repair traffic.
   fixture per server (private schema, key prefix, temporary database), and
   readiness. Fixture resets, experiment loops, CSV, and panics on dependency
   errors stay out of request handlers. Use the Go helpers in
-  `internal/lab/perf` or the Deno lab helpers; never a second lifecycle.
+  `internal/lab/perf` (`Database`, `Warm`, `Int`, `Choice`, `Limit`,
+  `Serve`); a Deno adapter follows `cross-store-failure/perf/server.ts`
+  until a shared Deno lifecycle helper exists. Never a second lifecycle.
+- Warm every pooled connection before the listener starts (`perf.Warm` runs
+  a function on each connection the pool may open): pgx prepares statements
+  per connection, and a lazy dial otherwise lands inside a timed request.
+  Take the connection before starting the timer when the core accepts one,
+  so pool waits stay outside `elapsed_ms` as in the base runner.
 - `POST /operation` calls the core once per request with bounded, validated
   inputs and returns what the core returned, plus the variant that served it.
   If the base runner timed the core call, time it the same way here and
@@ -105,19 +121,30 @@ measured request so the shared SQL still excludes stats and repair traffic.
 ## 4. Build the workload around the variants
 
 `perf/k6.ts` re-exports `options` and `handleSummary` from
-`scripts/perf/workload.ts` and adds only the lesson. Declare the adapter's
-response shapes as interfaces and pass them to `assertResponse<T>` and
-`stats<T>`.
+`scripts/perf/workload.ts` and adds only the lesson (`optionsFor(defaults,
+extra)` when the lesson needs its own default rate, p95 budget, or k6
+options). Declare the adapter's response shapes as interfaces and pass them to
+`assertResponse<T>`, which returns the parsed body when both checks pass so
+metrics are recorded from it, not inside the predicate. Workload-only knobs
+come from `number(name, fallback, min, max)`; a knob the server owns is read
+once in `setup()` with `settings<T>()` (from `/health`), never validated a
+second time from the environment.
 
 - The default function picks the variant for this iteration (round-robin over
   the core's names, or `exec.scenario.iterationInTest % n`), sends the request
   tagged with it, and checks the status and the invariant the base runner
   checks per call.
 - Record the lesson's domain signal as a custom metric **tagged by variant**:
-  a `Trend` of the server's `elapsed_ms`, a `Rate` of cache misses or applied
-  duplicates, a `Counter` of increments. Tagging is what lets the analysis
-  split it; an untagged metric only reports a blended mean.
-- `teardown` reads `/stats` and asserts the lesson's invariant on the numbers.
+  a `Trend` of the server's `elapsed_ms`, a `Rate` of applied duplicates or
+  locked writes. Tagging is what lets the analysis split it; an untagged
+  metric only reports a blended mean. Do not add a metric that only echoes
+  what the workload itself chose (a crash flag, a constant batch size): a
+  cross-check that cannot fail teaches nothing.
+- `teardown` reads `/stats` and asserts the lesson's invariant on the numbers
+  (`everyVariant(names, predicate)` when `/stats` is `{variants: [...]}`).
+  Report the invariant's inputs, not arithmetic on them: a field that is
+  always the sum of two others, or that no teardown, SQL, or README reads,
+  is noise.
   For asynchronous work, drain with a bounded wait first and do not report
   submission latency as completion latency.
 - Profiles come from `workload.ts`: `smoke` (one user, ten seconds), `load`
@@ -137,14 +164,14 @@ status, failure rate, dropped iterations, request count, ten-second buckets,
 and every custom metric. The runner appends the lesson's `perf/analyze.sql`
 after it. That file is required here, and it holds the lesson:
 
-1. **Settings header:** `select fixtures, unnest(server) from
-   read_json('settings.json')`, so the run's mode and knobs print above the
-   numbers.
+1. **Settings legend:** the shared file already prints `settings.json` as
+   its first table; add one `.print` line saying what the lesson's knobs
+   mean (`BATCH_SIZE is batchSize in the base main.go`).
 2. **The base table, by variant:** the same columns as the base `analyze.sql`
    where they mean the same thing (`p50_batch_ms`, `overcount`, `p95_ms`),
-   computed from k6 samples grouped by the `variant` extracted from
-   `extra_tags`. Show the server's `elapsed_ms` trend beside
-   `http_req_duration` when the adapter returns it.
+   computed from k6 samples grouped by `tag(extra_tags, 'variant')` (the
+   shared macro; extract each tag once in a view). Show the server's
+   `elapsed_ms` trend beside `http_req_duration` when the adapter returns it.
 3. **The question:** the lesson's final number in the named-group form
    (`median(x) filter (where variant = 'a')` beside the same for `b`, then
    the ratio), so a mistyped variant name is visible as a NULL beside a value.

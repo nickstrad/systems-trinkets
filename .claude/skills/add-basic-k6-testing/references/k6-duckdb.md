@@ -26,11 +26,13 @@ System tags (`name`, `scenario`, `status`, ...) have their own columns. Any
 other tag on a request or a custom metric is joined into `extra_tags` as
 `key=value&key=value`. Verified with a `Trend.add(v, {variant: "pipeline",
 name: "operation"})`: the row had `name=operation` in its column and
-`extra_tags=variant=pipeline`. Extract it once and group by it:
+`extra_tags=variant=pipeline`. The shared `scripts/perf/analyze.sql` defines
+`tag(extra, key)` (an anchored `regexp_extract`, so `variant` never matches
+`sub_variant`). Extract each tag once in a view and group by it:
 
 ```sql
 .print 'Base lesson table under load: batch latency by variant (milliseconds)'
-select regexp_extract(extra_tags, 'variant=([^&]+)', 1) as variant,
+select tag(extra_tags, 'variant') as variant,
        count(*) as batches,
        round(median(metric_value), 3) as p50_batch_ms,
        round(quantile_cont(metric_value, 0.95), 3) as p95_batch_ms
@@ -46,7 +48,7 @@ mistyped variant shows as NULL beside a value instead of vanishing:
 ```sql
 .print 'Sequential vs pipeline: ratio of median HTTP batch latency'
 with by_variant as (
-  select regexp_extract(extra_tags, 'variant=([^&]+)', 1) as variant,
+  select tag(extra_tags, 'variant') as variant,
          metric_value
   from samples
   where metric_name = 'http_req_duration' and name = 'operation'
@@ -62,7 +64,7 @@ server's own `elapsed_ms` beside `http_req_duration` shows how much HTTP adds:
 
 ```sql
 .print 'Core call time reported by the server, by variant (milliseconds)'
-select regexp_extract(extra_tags, 'variant=([^&]+)', 1) as variant,
+select tag(extra_tags, 'variant') as variant,
        count(*) as samples,
        round(median(metric_value), 3) as p50_core_ms
 from samples
@@ -73,10 +75,11 @@ order by all;
 
 ## Settings and final state are JSON files beside the CSV
 
-```sql
-.print 'Server settings for this run'
-select fixtures, unnest(server) from read_json('settings.json');
+The shared SQL prints `settings.json` first (`select fixtures,
+unnest(server) from read_json('settings.json')`); the lesson adds a
+`.print` legend for its knobs. The final `/stats` is `domain.json`:
 
+```sql
 .print 'Invariant: what the server confirmed vs what the store holds'
 select mode, batches, expected_sum, actual_sum,
        actual_sum - expected_sum as difference
@@ -84,9 +87,14 @@ from read_json('domain.json');
 ```
 
 `unnest(server)` spreads the `/health` settings map into one column per
-setting (verified against a run's `settings.json` with `BATCH_SIZE`, `MODE`,
-`PORT`). Adapt the `domain.json` column names to what the adapter's `/stats`
-returns; keep both sides of the invariant visible, not a boolean.
+setting (verified against a run's `settings.json`). When `/stats` reports
+per variant as `{variants: [{variant, ...}]}`, `select d.batch_size,
+unnest(d.variants, recursive := true) from read_json('domain.json') d`
+spreads the array into one row per variant with one column per field.
+Adapt the column names to what the adapter's `/stats` returns; keep both
+sides of the invariant visible, not a boolean. A `.print` label cannot hold
+an apostrophe: `'lesson''s'` prints as `lesson s` because the dot command
+splits on the quote; reword the label instead.
 
 ## Interpretation rules
 

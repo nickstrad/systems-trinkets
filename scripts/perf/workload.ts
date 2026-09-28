@@ -1,7 +1,7 @@
 // Shared k6 workload: bounded profiles, request helpers, checks, thresholds,
 // and the summary. k6 runs this TypeScript directly; Deno only type-checks it
 // against @types/k6 (see the root deno.json).
-import http, { type Response } from "k6/http";
+import http, { type Params, type Response } from "k6/http";
 import { check, sleep } from "k6";
 import type { Options, Scenario } from "k6/options";
 
@@ -11,7 +11,9 @@ if (!/^http:\/\/(127\.0\.0\.1|localhost):[0-9]+$/.test(base)) {
 }
 const profile: string = __ENV.PROFILE || "smoke";
 
-function number(
+// number reads a bounded integer setting; lessons use it for workload-only
+// knobs (a knob the server also reads comes from settings() instead).
+export function number(
   name: string,
   fallback: number,
   min: number,
@@ -24,9 +26,20 @@ function number(
   return n;
 }
 
-function optionsFor(): Options {
-  const rate = number("RATE", 5, 1, 100);
-  const maxVUs = number("MAX_VUS", 32, 1, 128);
+// optionsFor builds the scenario for PROFILE. A lesson may pass its own
+// defaults (RATE, MAX_VUS, and the p95 budget) and extra k6 options; the
+// environment still overrides the defaults.
+export interface Defaults {
+  rate?: number;
+  maxVUs?: number;
+  p95Ms?: number;
+}
+export function optionsFor(
+  defaults: Defaults = {},
+  extra: Partial<Options> = {},
+): Options {
+  const rate = number("RATE", defaults.rate ?? 5, 1, 100);
+  const maxVUs = number("MAX_VUS", defaults.maxVUs ?? 32, 1, 128);
   const defaultDuration: Record<string, number> = { smoke: 10, soak: 300 };
   const duration = number(
     "DURATION_S",
@@ -97,10 +110,11 @@ function optionsFor(): Options {
       "http_reqs{name:operation}": ["count>0"],
       "http_req_failed{name:operation}": ["rate<0.01"],
       "http_req_duration{name:operation}": [
-        `p(95)<${number("P95_MS", 1500, 1, 60000)}`,
+        `p(95)<${number("P95_MS", defaults.p95Ms ?? 1500, 1, 60000)}`,
       ],
       dropped_iterations: ["count==0"],
     },
+    ...extra,
   };
 }
 
@@ -125,11 +139,31 @@ export function handleSummary(data: SummaryData): Record<string, string> {
   };
 }
 
-export function request(method: string, path: string): Response {
-  return http.request(method, base + path, null, {
-    tags: { name: "operation" },
-    timeout: "12s",
+// operationParams fixes what every measured request carries: the name the
+// shared SQL filters on and the timeout. Extra tags (a lesson's variant, for
+// example) merge with the name, and the lesson SQL splits them from extra_tags.
+export function operationParams(tags: Record<string, string> = {}): Params {
+  return { tags: { ...tags, name: "operation" }, timeout: "12s" };
+}
+// request sends one measured operation; http.batch callers use operationParams.
+export function request(
+  method: string,
+  path: string,
+  tags: Record<string, string> = {},
+): Response {
+  return http.request(method, base + path, null, operationParams(tags));
+}
+// settings reads the server's reported settings from /health, for setup():
+// a knob the server owns is read once there rather than passed twice.
+export function settings<T extends object>(): T {
+  const health = http.get(base + "/health", {
+    tags: { name: "health" },
+    timeout: "5s",
   });
+  if (health.status !== 200) {
+    throw new Error(`/health answered ${health.status}`);
+  }
+  return body<{ settings?: T }>(health).settings ?? ({} as T);
 }
 // body trusts the adapter's JSON shape; the invariant predicates verify it.
 export function body<T extends object>(response: Response): T {
@@ -139,15 +173,20 @@ export function body<T extends object>(response: Response): T {
     return {} as T;
   }
 }
+// assertResponse checks the status and the lesson's per-call invariant, and
+// returns the parsed body when both pass so the lesson can record its
+// metrics from it; undefined means the sample failed a check.
 export function assertResponse<T extends object>(
   response: Response,
   predicate: (b: T) => boolean,
-): void {
-  check(response, {
+): T | undefined {
+  const b = body<T>(response);
+  const ok = check(response, {
     "operation succeeds": (r) => r.status === 200,
-    "operation invariant": () => predicate(body<T>(response)),
+    "operation invariant": () => predicate(b),
   });
   if (profile === "smoke") sleep(0.1);
+  return ok ? b : undefined;
 }
 // repair logs the state a lesson's reconciler starts from, then runs it.
 export function repair(): void {
@@ -162,6 +201,19 @@ export function repair(): void {
     timeout: "30s",
   });
   check(result, { "repair succeeds": (r) => r.status === 200 });
+}
+// everyVariant is the teardown for adapters whose /stats reports
+// {variants: [{variant, ...}]}: every named variant must be present and pass.
+export function everyVariant<V extends { variant: string }>(
+  names: readonly string[],
+  predicate: (v: V) => boolean,
+): void {
+  stats<{ variants?: V[] }>((b) =>
+    names.every((name) => {
+      const v = b.variants?.find((s) => s.variant === name);
+      return v !== undefined && predicate(v);
+    })
+  );
 }
 export function stats<T extends object>(predicate: (b: T) => boolean): void {
   const result = http.get(base + "/stats", {

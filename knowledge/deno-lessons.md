@@ -33,7 +33,11 @@ Set up 2026-09-27 with the first Deno lesson, `cross-store-failure`.
   one `pg.Client`; `pool(max, options)` opens a lazy `pg.Pool` whose
   `options` string is passed to Postgres as startup parameters (the perf
   server uses `-c search_path=... -c statement_timeout=5000`; see
-  [performance-labs.md](performance-labs.md)). `valkey.ts`: `url()` is `CACHE_URL` or
+  [performance-labs.md](performance-labs.md)). `pool()` takes no pool
+  config, so `idleTimeoutMillis` stays at node-postgres's 10 s default: a
+  perf server warms its pool at startup (`Promise.all` of `connect()` +
+  `select 1`), but after a lull longer than 10 s the next request re-dials
+  inside its timed window (2026-09-28). `valkey.ts`: `url()` is `CACHE_URL` or
   `redis://localhost:6379`; `connect()` creates a node-redis client, connects,
   and pings. `seaweedfs.ts`: `url()` is `OBJECT_STORE_URL` or
   `http://localhost:8333` with access key `trinkets`, secret key

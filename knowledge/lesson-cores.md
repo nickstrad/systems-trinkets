@@ -46,6 +46,22 @@ Keep these existing semantics in mind:
   dependency failure. Reconciliation still follows the lesson's assumptions
   about in-flight work and grace windows.
 
+Adapter notes from the 2026-09-28 perf remake (cores unchanged):
+
+- A core whose SQL names its table without a schema (queue, counter) cannot
+  serve two variants from one table; the adapter calls `perf.Database` once
+  per variant so each has its own schema and pool.
+- `core.ProfileKey(id)` fixes the cache key format, so an adapter namespaces
+  the ids (a random base) rather than the keys.
+- `WriteEvent` reports connection or preparation failures as setup errors;
+  under concurrent DELETE-mode writers that step itself hits SQLITE_BUSY
+  (a new connection needs SHARED), so an adapter opens and warms every
+  connection first.
+- `core.Work`'s processing sleep ignores context cancellation; a cancelled
+  request holds its row lock for the full work time before rolling back.
+- The Deno core's metadata rows carry no prefix, so `measure()` and the
+  dangling reconciler see every row in the schema; one schema per variant.
+
 Verified 2026-09-27: `make check` passed (Go vet and Deno type checking); importing
 `core.ts` with `deno eval --cached-only` completed without running the lesson;
 `make -n` retained all five run commands and all three service startup commands.

@@ -5,6 +5,14 @@ select * replace (cast(metric_value as double) as metric_value,
                   cast(timestamp as bigint) as timestamp)
 from read_csv('metrics.csv', header = true, all_varchar = true);
 
+-- tag pulls one custom tag out of extra_tags (k6 writes key=value&key=value);
+-- the anchored key keeps 'variant' from matching 'sub_variant'.
+create macro tag(extra, key) as
+  regexp_extract(extra, '(^|&)' || key || '=([^&]+)', 2);
+
+.print 'Server settings for this run (from /health; fixtures says whether the run started its own server)'
+select fixtures, unnest(server) from read_json('settings.json');
+
 .print 'HTTP latency by scenario, operation, and status (milliseconds)'
 select scenario, name, status,
        count(*) as samples,
