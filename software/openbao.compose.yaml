@@ -1,0 +1,30 @@
+# OpenBao (Vault-compatible secrets manager) for lessons, dev mode.
+# Start with `make up-openbao` from the repo root.
+# Address: http://localhost:8200   Root token: trinkets
+# Example: curl -H 'X-Vault-Token: trinkets' http://localhost:8200/v1/sys/health
+#
+# Dev mode stores everything in memory: no volume here, and all data
+# (secrets, leases, the unseal key) is lost on `make down-openbao` /
+# `make clean-openbao` alike, since there's nothing to persist.
+#
+# No cap_add/IPC_LOCK is needed: server -dev disables mlock() automatically,
+# which is what IPC_LOCK would otherwise be for (only non-dev servers need
+# it). BAO_DEV_ROOT_TOKEN_ID (not a CLI flag) sets the root token, because the
+# image's docker-entrypoint.sh builds the "bao server -dev ..." command
+# itself from that env var when CMD starts with "server".
+name: trinkets-openbao
+
+services:
+  openbao:
+    image: openbao/openbao:2.1.0
+    environment:
+      BAO_DEV_ROOT_TOKEN_ID: trinkets
+      BAO_ADDR: http://127.0.0.1:8200
+    command: ["server", "-dev"]
+    ports:
+      - "127.0.0.1:${OPENBAO_PORT:-8200}:8200"
+    healthcheck:
+      test: ["CMD", "bao", "status"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

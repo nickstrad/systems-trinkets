@@ -2,7 +2,7 @@
 
 Applies when a lesson talks to the local SeaweedFS S3 gateway at
 `http://localhost:8333` (access key `trinkets`, secret key `trinkets-secret`,
-region `us-east-1`, path-style; see `services/index.md`). From Deno use
+region `us-east-1`, path-style; see `software/software.md`). From Deno use
 `lessons/deno/lab/seaweedfs.ts`; no Go lesson uses S3 yet.
 
 - **`LastModified` is whole seconds.** Two PUTs 250 ms apart both listed as

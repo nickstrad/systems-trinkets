@@ -7,7 +7,7 @@ import { Client, Pool } from "pg";
 import { env } from "lab/lab.ts";
 
 /**
- * DEFAULT_URL is the local dev database from services/index.md. The
+ * DEFAULT_URL is the local dev database from software/software.md. The
  * credentials are not secret; every lesson prints and uses them as-is.
  */
 export const DEFAULT_URL =

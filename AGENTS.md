@@ -17,7 +17,7 @@ user's code or lessons:
 
 ## Credentials are not secret here
 
-Every service runs locally with fixed dev credentials (see `services/index.md`).
+Every service runs locally with fixed dev credentials (see `software/software.md`).
 Whenever you mention how to connect — in chat, docs, code, or error explanations —
 write the full connection string with username and password, e.g.
 `postgres://trinkets:trinkets@localhost:5432/trinkets`. Never redact or
@@ -28,7 +28,7 @@ abbreviate credentials, and never replace them with placeholders.
 1. Read `knowledge/index.md` first. `knowledge/` holds tips from earlier work:
    where things live, gotchas, and verified commands. Follow `knowledge/AGENTS.md`
    and keep the index updated when you learn something reusable.
-2. Backing services live in `services/` (`services/index.md`); run them with
+2. Backing services live in `software/` (`software/software.md`); run them with
    `make up-<service>` / `down-` / `clean-` from the repo root. Lessons run
    with `make run-<lesson>` / `analyze-` / `lab-`; the repo is one Go module
    with shared helpers in `internal/lab` (see `knowledge/go-modules.md`).

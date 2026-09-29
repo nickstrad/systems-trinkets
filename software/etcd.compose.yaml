@@ -1,0 +1,28 @@
+# etcd for lessons. Start with `make up-etcd` from the repo root.
+# Connect: etcdctl --endpoints=http://localhost:2379 (no auth)
+name: trinkets-etcd
+
+services:
+  etcd:
+    image: gcr.io/etcd-development/etcd:v3.5.17
+    command:
+      - /usr/local/bin/etcd
+      - --name=trinkets-etcd
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://localhost:${ETCD_PORT:-2379}
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://127.0.0.1:2380
+      - --initial-cluster=trinkets-etcd=http://127.0.0.1:2380
+    ports:
+      - "127.0.0.1:${ETCD_PORT:-2379}:2379"
+    volumes:
+      - etcd-data:/etcd-data
+    healthcheck:
+      test: ["CMD", "etcdctl", "--endpoints=http://localhost:2379", "endpoint", "health"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  etcd-data:

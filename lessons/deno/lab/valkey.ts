@@ -4,7 +4,7 @@
 import { createClient } from "redis";
 import { env } from "lab/lab.ts";
 
-/** DEFAULT_URL is the local dev Valkey from services/index.md (no auth). */
+/** DEFAULT_URL is the local dev Valkey from software/software.md (no auth). */
 export const DEFAULT_URL = "redis://localhost:6379";
 
 /** url is CACHE_URL, or DEFAULT_URL. */

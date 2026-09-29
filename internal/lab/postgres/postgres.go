@@ -11,7 +11,7 @@ import (
 	"github.com/nickstrad/systems-trinkets/internal/lab"
 )
 
-// DefaultURL is the local dev database from services/index.md. The
+// DefaultURL is the local dev database from software/software.md. The
 // credentials are not secret; every lesson prints and uses them as-is.
 const DefaultURL = "postgres://trinkets:trinkets@localhost:5432/trinkets"
 

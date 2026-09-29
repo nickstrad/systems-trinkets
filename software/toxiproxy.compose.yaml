@@ -1,0 +1,37 @@
+# Toxiproxy for fault injection in lessons. Start with `make up-toxiproxy` from the repo root.
+# HTTP API: http://localhost:8474
+#
+# Lessons create proxies at runtime via the API, e.g. to sit in front of Valkey
+# on the host (127.0.0.1:${VALKEY_PORT:-6379}):
+#   curl -X POST localhost:8474/proxies -d \
+#     '{"name":"valkey","listen":"0.0.0.0:22000","upstream":"host.docker.internal:6379"}'
+#
+# A proxy's "listen" address MUST be 0.0.0.0:<port>, not 127.0.0.1:<port> or
+# localhost:<port> — Toxiproxy binds that address *inside the container*, and
+# only 0.0.0.0 is reachable through the published port mapping below. The
+# "upstream" address reaches other repo services through the host, via
+# host.docker.internal:<port> (see extra_hosts).
+#
+# Proxy listener ports are published as a fixed range so lessons can pick any
+# free port in it: 127.0.0.1:22000-22009. Proxies created via the API do NOT
+# survive a container restart (they're in-memory only) unless started from a
+# -config file; this repo doesn't use one, so recreate proxies after
+# `make down-toxiproxy` + `make up-toxiproxy`.
+#
+# The image ships no shell, no curl/wget, and no toxiproxy-cli on PATH — it's
+# a from-scratch image with two binaries at /: /toxiproxy (the server, the
+# entrypoint) and /toxiproxy-cli (the client, used below only for the
+# healthcheck via its full path).
+name: trinkets-toxiproxy
+
+services:
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    ports:
+      - "127.0.0.1:${TOXIPROXY_PORT:-8474}:8474"
+      - "127.0.0.1:22000-22009:22000-22009"
+    healthcheck:
+      test: ["CMD", "/toxiproxy-cli", "-h", "http://127.0.0.1:8474", "list"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

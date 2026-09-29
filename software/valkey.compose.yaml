@@ -6,7 +6,8 @@ services:
   valkey:
     image: valkey/valkey:9
     # Append-only file so data survives restarts until `make clean-valkey`.
-    command: ["valkey-server", "--appendonly", "yes"]
+    # notify-keyspace-events Ex publishes key expiry events (__keyevent@0__:expired) for lessons.
+    command: ["valkey-server", "--appendonly", "yes", "--notify-keyspace-events", "Ex"]
     ports:
       - "127.0.0.1:${VALKEY_PORT:-6379}:6379"
     volumes:

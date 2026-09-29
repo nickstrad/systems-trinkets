@@ -1,0 +1,21 @@
+# OCI image registry for lessons. Start with `make up-registry` from the repo root.
+# Connect: localhost:5050 (no auth); push/pull with `docker tag`/`docker push` against localhost:5050/<repo>
+name: trinkets-registry
+
+services:
+  registry:
+    image: registry:2
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    ports:
+      - "127.0.0.1:${REGISTRY_PORT:-5050}:5000"
+    volumes:
+      - registry-data:/var/lib/registry
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/v2/ || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  registry-data:

@@ -5,13 +5,13 @@ See `AGENTS.md` for how to add items.
 
 | Item | What it covers |
 |---|---|
-| [lesson-authoring.md](lesson-authoring.md) | `$create-daily-lesson`, the v3 specification, guide-only output for manual typing, current-source inspection, and topic/slug discovery across guides and both runtimes |
+| [lesson-authoring.md](lesson-authoring.md) | `$create-lesson`, Markdown guides in docs/lessons for glow, complete code and terminal visuals, embedded k6 build plans, scratch verification, and topic/slug discovery |
 | [performance-labs.md](performance-labs.md) | HTTP/k6 Make targets, the Deno runner, the `workload.ts` helpers (`request` tags, `assertResponse` body, `settings`, `everyVariant`, `optionsFor`), shared `analyze.sql` with the `tag()` macro and settings header, `perf.Warm`, how each of the six lessons puts its contrast in one run, isolated fixtures, CSV interpretation, why Make needs no `export` for settings, the idle-gap timing inflation, and verified smoke/load/failure workflows |
 | [lesson-cores.md](lesson-cores.md) | Reusable core entry points for all six lessons, caller-owned dependencies, error/result semantics, HTTP adapter boundaries, and per-variant schema/warm-up needs the adapters discovered |
-| [local-services.md](local-services.md) | Running `services/` via the Makefile: port conflicts, the `.PHONY` pattern-rule trap, checking the Docker daemon |
+| [local-services.md](local-services.md) | Running `software/` via the Makefile: port conflicts, the `.PHONY` pattern-rule trap, checking the Docker daemon; the `services/` to `software/` rename and the `software.md` catalog; Apple `container` CLI start-before-kernel-set gotcha; per-image gotchas for the seven optional services (nats, etcd, registry, toxiproxy, temporal, openbao, pgbouncer) and the wal_level/keyspace flags |
 | [sqlite-go.md](sqlite-go.md) | SQLite via modernc in Go: per-connection pragmas (use the DSN), WAL sidecar files, timing only the write |
 | [postgres-go.md](postgres-go.md) | pgx: first-call statement preparation skews timings, multi-statement Exec limits, `$1` cannot be a table name, blocked `for update` re-checks the row, `returning` |
-| [valkey-go.md](valkey-go.md) | go-redis: `valkey.Connect` parses `CACHE_URL` and pings, `redis.Nil` means miss, one key builder |
+| [valkey-go.md](valkey-go.md) | go-redis: URL parsing/ping, `redis.Nil`, shared key builders; lease TTL validation, atomic token-checked renewal, and limits of ownership success counts |
 | [go-modules.md](go-modules.md) | One root module, lessons in `lessons/go/`; `internal/lab` stdlib helpers plus `lab/postgres` and `lab/valkey` connect helpers; `make run-/analyze-/lab-<lesson>`, `make check`; all-`// indirect` go.mod means tidy ran too early |
 | [duckdb-analysis.md](duckdb-analysis.md) | `analyze.sql` idioms: loading CSVs, `.print` labels (no apostrophes), `group by all`, `arg_max`, `filter`, p50/p95, alias reuse (not beside a scalar subquery), named-group ratios, mismatched group literals give NULL, recursive `unnest` of JSON arrays, macros; optional k6 skill and metric-sample CSV analysis |
 | [agent-instructions.md](agent-instructions.md) | `AGENTS.md` holds instructions, `CLAUDE.md` imports it with `@AGENTS.md`; why no symlinks or `/config` setting |

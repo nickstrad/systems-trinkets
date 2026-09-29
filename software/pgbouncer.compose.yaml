@@ -1,0 +1,37 @@
+# PgBouncer in front of the repo's PostgreSQL. Start `make up-postgres` first,
+# then `make up-pgbouncer` from the repo root.
+# Connect: postgres://trinkets:trinkets@localhost:6432/trinkets
+# Admin console (SHOW POOLS, SHOW STATS): postgres://trinkets:trinkets@localhost:6432/pgbouncer
+# Pool mode and size are env vars so lessons can compare them, e.g.
+#   PGBOUNCER_POOL_MODE=session PGBOUNCER_POOL_SIZE=10 make up-pgbouncer
+name: trinkets-pgbouncer
+
+services:
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.25.2-p0
+    environment:
+      # PostgreSQL runs in another Compose project, so reach it through the
+      # host port. No database name in the URL: pgbouncer.ini gets a `*` entry
+      # that forwards any database name the client asks for.
+      DATABASE_URL: postgres://trinkets:trinkets@host.docker.internal:${POSTGRES_PORT:-5432}
+      # PostgreSQL 18 stores SCRAM verifiers, so PgBouncer needs the plaintext
+      # password in userlist.txt (the entrypoint writes it for scram-sha-256).
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: ${PGBOUNCER_POOL_MODE:-transaction}
+      DEFAULT_POOL_SIZE: ${PGBOUNCER_POOL_SIZE:-5}
+      ADMIN_USERS: trinkets
+      LISTEN_PORT: "5432"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${PGBOUNCER_PORT:-6432}:5432"
+    healthcheck:
+      # Checks that PgBouncer accepts connections; it does not open a server
+      # connection, so it does not show up in SHOW POOLS or SHOW STATS. Each
+      # probe logs a "login attempt" line, so after startup it runs every 30s.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-p", "5432", "-U", "trinkets", "-d", "trinkets"]
+      interval: 30s
+      start_period: 30s
+      start_interval: 1s
+      timeout: 3s
+      retries: 3

@@ -61,20 +61,22 @@ On macOS: `brew install k6 duckdb deno go`.
 
 ### 1. Services: `up-`, `down-`, `clean-`, `logs-`, `ps`
 
-The backing services run in Docker and are defined in [`services/`](services/index.md).
+The backing services run in Docker and are defined in [`software/`](software/software.md).
 Start only what a lesson needs; the table in the next section says which.
 
 | Command | What it runs | When to use it |
 |---|---|---|
-| `make up-<service>` | `docker compose -f services/<service>.compose.yaml up -d --wait` | Before any lesson that uses the service. Returns once the health check passes, so the next command can connect immediately. Safe to repeat; a running service is left alone. |
+| `make up-<service>` | `docker compose -f software/<service>.compose.yaml up -d --wait` | Before any lesson that uses the service. Returns once the health check passes, so the next command can connect immediately. Safe to repeat; a running service is left alone. |
 | `make down-<service>` | `docker compose ... down` | Stop the container but keep its data volume. Use between sessions. |
 | `make clean-<service>` | `docker compose ... down -v --remove-orphans` | Stop and delete the data volume. Use when you want a fresh database, cache, or bucket. Lessons reset their own tables and keys, so this is rarely necessary. |
 | `make logs-<service>` | `docker compose ... logs -f` | Follow the service log while a lesson runs. Ctrl-C stops following; the service keeps running. |
 | `make ps` | `docker ps` filtered to `trinkets-*` | See which services are up, healthy, and on which ports. |
 
-The services are `postgres`, `valkey`, and `seaweedfs`. Several can be started
+The core services are `postgres`, `valkey`, and `seaweedfs`; `make help` lists
+the rest (`nats`, `etcd`, `registry`, `toxiproxy`, `temporal`, `openbao`,
+`pgbouncer`), each with its own compose file. Several can be started
 in one command: `make up-postgres up-valkey`. Connection details and dev
-credentials are in [`services/index.md`](services/index.md); lessons use them
+credentials are in [`software/software.md`](software/software.md); lessons use them
 by default (`postgres://trinkets:trinkets@localhost:5432/trinkets`,
 `redis://localhost:6379`, S3 at `http://localhost:8333` with access key
 `trinkets` and secret key `trinkets-secret`).
@@ -218,5 +220,9 @@ Lessons build on a shared set of local services:
 - **SeaweedFS** — S3-compatible object storage
 - **DuckDB** — analysis of run data (results, timings, traces) produced by lessons
 
-PostgreSQL, Valkey, and SeaweedFS run in Docker, defined in [`services/`](services/index.md).
+PostgreSQL, Valkey, and SeaweedFS run in Docker, defined in [`software/`](software/software.md),
+alongside optional services (NATS JetStream, etcd, an OCI registry, Toxiproxy,
+Temporal, OpenBao, PgBouncer) that later lessons build on. The catalog in
+[`software/software.md`](software/software.md) lists every piece of software
+worth a lesson and whether it is configured yet; lessons use only configured rows.
 DuckDB runs in-process or from its CLI, so it needs no service.

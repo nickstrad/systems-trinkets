@@ -11,7 +11,7 @@ import {
 import { env } from "lab/lab.ts";
 
 /**
- * DEFAULT_URL is the local dev S3 gateway from services/index.md. The
+ * DEFAULT_URL is the local dev S3 gateway from software/software.md. The
  * credentials are not secret; every lesson uses them as-is.
  */
 export const DEFAULT_URL = "http://localhost:8333";

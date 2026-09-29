@@ -14,16 +14,23 @@
 #   make ps               show running trinkets services
 #   make check            compile-check every lesson: go vet ./... and deno check
 #
-# Services: postgres, valkey, seaweedfs (see services/index.md)
+# Services: postgres, valkey, seaweedfs, nats, etcd, registry, toxiproxy, temporal, openbao, pgbouncer (see software/software.md)
 
-SERVICES     := postgres valkey seaweedfs
+SERVICES     := postgres valkey seaweedfs nats etcd registry toxiproxy temporal openbao pgbouncer
 GO_LESSONS   := $(patsubst lessons/go/%/main.go,%,$(wildcard lessons/go/*/main.go))
 DENO_LESSONS := $(patsubst lessons/deno/%/main.ts,%,$(wildcard lessons/deno/*/main.ts))
 LESSONS      := $(GO_LESSONS) $(DENO_LESSONS)
 
-compose_file_postgres  := services/postgres.compose.yaml
-compose_file_valkey    := services/valkey.compose.yaml
-compose_file_seaweedfs := services/seaweedfs/compose.yaml
+compose_file_postgres  := software/postgres.compose.yaml
+compose_file_valkey    := software/valkey.compose.yaml
+compose_file_seaweedfs := software/seaweedfs/compose.yaml
+compose_file_nats      := software/nats.compose.yaml
+compose_file_etcd      := software/etcd.compose.yaml
+compose_file_registry  := software/registry.compose.yaml
+compose_file_toxiproxy := software/toxiproxy.compose.yaml
+compose_file_temporal  := software/temporal.compose.yaml
+compose_file_openbao   := software/openbao.compose.yaml
+compose_file_pgbouncer := software/pgbouncer.compose.yaml
 
 compose = docker compose -f $(compose_file_$(1))
 

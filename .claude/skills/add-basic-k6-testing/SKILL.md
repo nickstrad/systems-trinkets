@@ -27,8 +27,10 @@ the lesson itself: `core/core.go` or `core.ts`, `main.go` or `main.ts`,
 the work log before designing anything; every later choice is checked against
 them.
 
-If the lesson has `K6_PLAN.md`, read it as the implementation brief. Follow
-its workload phases, metrics, isolation, and acceptance criteria after
+Read `docs/lessons/<slug>.md` (or a user-supplied guide path) when present;
+its `k6 build plan` section is the implementation brief. Also read a
+lesson-local `K6_PLAN.md` if one exists. Follow the plan's workload phases,
+metrics, isolation, and acceptance criteria after
 checking them against the actual core and measurements. Update stale parts
 of the plan when the base lesson has changed, explaining the adjustment.
 For lessons created with `$create-lesson`, keep the follow-up README focused

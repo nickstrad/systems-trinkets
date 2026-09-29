@@ -11,7 +11,7 @@ import (
 	"github.com/nickstrad/systems-trinkets/internal/lab"
 )
 
-// DefaultURL is the local dev Valkey from services/index.md (no auth).
+// DefaultURL is the local dev Valkey from software/software.md (no auth).
 const DefaultURL = "redis://localhost:6379"
 
 // URL is CACHE_URL, or DefaultURL. It is a redis:// URL, not a host:port

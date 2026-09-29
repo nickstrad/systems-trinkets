@@ -3,7 +3,7 @@
 Applies when adding or editing agent instructions for any folder in this repo.
 
 - **Layout.** In each folder with instructions (repo root, `knowledge/`,
-  `services/`), `AGENTS.md` holds the real text and `CLAUDE.md` contains only
+  `software/`), `AGENTS.md` holds the real text and `CLAUDE.md` contains only
   `@AGENTS.md`. Codex and other tools read `AGENTS.md`; Claude Code reads
   `CLAUDE.md` and pulls `AGENTS.md` in through the import. Edit `AGENTS.md`;
   never put content in `CLAUDE.md` unless it is Claude-only.

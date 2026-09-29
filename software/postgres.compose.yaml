@@ -5,6 +5,8 @@ name: trinkets-postgres
 services:
   postgres:
     image: postgres:18
+    # wal_level=logical enables logical replication and change streams for lessons.
+    command: ["postgres", "-c", "wal_level=logical"]
     environment:
       POSTGRES_USER: trinkets
       POSTGRES_PASSWORD: trinkets
