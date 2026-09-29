@@ -52,7 +52,9 @@ blocked until configured; portability alone does not make a lesson ready.
 
 ## Lesson lifecycle
 
-Potential projects live in `docs/lessons/ideas.md`. `$create-lesson` takes an
+Lesson ideas live in `docs/lessons/ideas.md`, grouped by platform aspect with
+no ranking; `docs/lessons/projects.md` groups them into potential platforms
+and names the integration work between them. `$create-lesson` takes an
 existing idea and writes a complete working guide in `docs/lessons/planned/`,
 using only rows marked `Configured: yes` in `software/software.md`. Leave the
 base source for the learner unless explicitly asked to implement it.

@@ -13,11 +13,11 @@ means authoring this runnable guide, not writing the learner's source files.
 Honor a supplied idea, language, or service within the configured-software gate.
 
 Ideas, plans, and completed work have separate homes. Read
-`docs/lessons/AGENTS.md` for the table schema and global impact order, and
+`docs/lessons/AGENTS.md` for the entry format (there is no ranking), and
 `docs/lessons/README.md` for lifecycle and completion criteria. Keep the
 idea entry and its plan link current; do not move a freshly authored guide to
-`completed/`. Adding potential projects to `ideas.md` is a separate ideation
-task, optionally informed by `docs/agentic-platforms/`.
+`completed/`. Adding ideas to `ideas.md` or projects to `projects.md` is a
+separate ideation task, optionally informed by `docs/agentic-platforms/`.
 
 ## Read the specification and current context
 
@@ -78,8 +78,9 @@ another eligible idea; if none exists, report that no idea is ready. Never ask
 the learner to install software or add Docker configuration as part of a lesson.
 
 Select the requested idea by its stable slug or title. Without a selection,
-choose the unplanned idea with the smallest global `Order` whose entire
-required stack is configured. Reuse its stable slug, check for existing guides,
+choose an unplanned idea whose entire required stack is configured,
+preferring one listed under "Lessons needed" for the project marked "Start
+here" in `docs/lessons/projects.md`. Reuse its stable slug, check for existing guides,
 and explain its distinct angle if related lessons already exist. Recheck the catalog even if ideas.md says
 "ready". If a supplied topic or imported lesson is absent from ideas.md,
 record it there first because the user has explicitly supplied the idea;

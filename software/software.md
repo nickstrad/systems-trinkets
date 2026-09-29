@@ -135,7 +135,7 @@ stopped).
 | Git, Forgejo | AI | Clone into a sandbox, push results, webhooks that start jobs | no | git is installed; Forgejo via compose when needed |
 | Playwright, headless Chromium | AI | Computer-use agents inside a sandbox; memory and startup cost | no | inside a container; reference |
 | `ttyd`, xterm.js | AI | The browser end of a PTY stream | no | reference |
-| Usage ledger in PostgreSQL | Metering | Exactly-once meter events, reconciliation with runtime | no | tables in a lesson on the existing postgres |
+| Usage ledger in PostgreSQL | Metering | Exactly-once meter events, reconciliation with runtime | yes | not separate software: tables a lesson creates on the configured PostgreSQL (`postgres://trinkets:trinkets@localhost:5432/trinkets`) |
 | OpenMeter, Lago | Metering | Metering and billing services; dedup and aggregation windows | no | compose; reference |
 | Stripe meters | Metering | Push aggregated usage with idempotency keys | no | test mode; reference |
 

@@ -7,12 +7,12 @@ render/setup helpers and the Go snapshot helper's module and checksums; binaries
 and preview PNGs stay outside the repo. The global skill is independent.
 
 Project sources live in `docs/lessons/diagrams/ideas-*.mmd`, embedded in
-`docs/lessons/ideas.md`. Regenerate and check from the repo root:
+`docs/lessons/projects.md`. Regenerate and check from the repo root:
 
 ```sh
 bash .claude/skills/draw-visual/scripts/setup.sh
-python3 .claude/skills/draw-visual/scripts/render.py --update docs/lessons/ideas.md
-DRAW_VISUAL_MAX_WIDTH=70 python3 .claude/skills/draw-visual/scripts/render.py --check docs/lessons/ideas.md
+python3 .claude/skills/draw-visual/scripts/render.py --update docs/lessons/projects.md
+DRAW_VISUAL_MAX_WIDTH=70 python3 .claude/skills/draw-visual/scripts/render.py --check docs/lessons/projects.md
 ```
 
 Setup builds the pinned Mermaid tool with Go; rendering needs Python 3. On a
@@ -24,7 +24,7 @@ is provided, but this task did not verify execution on macOS.
 The snapshot launcher rebuilds its helper and therefore needs writable Go
 caches and binary destination. In a restricted session, an already installed
 compatible `diagram-snapshot` binary can generate previews directly with
-`--input docs/lessons/ideas.md --out <temporary-directory> --columns 70,80`.
+`--input docs/lessons/projects.md --out <temporary-directory> --columns 70,80`.
 This is a preview of terminal geometry, not a screenshot of the user's app.
 
 Verified 2026-09-29: skill validation, helper-source comparison with the copied

@@ -11,7 +11,7 @@
 Example requests:
 
 ```text
-Update docs/lessons/ideas.md with projects inspired by docs/agentic-platforms/.
+Update docs/lessons/ideas.md and projects.md with ideas inspired by docs/agentic-platforms/.
 $create-lesson from the outbox-redelivery idea in docs/lessons/ideas.md
 I've finished lease-reclaim; review the completion evidence and move its plan to completed.
 $add-basic-k6-testing lessons/go/lease-reclaim

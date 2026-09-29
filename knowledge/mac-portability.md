@@ -10,6 +10,40 @@ eligibility is irrelevant to the chosen scope. No Apple container, alternate VM 
 needed by the project designs. Containerd/nerdctl is allowed for a specific
 lesson benefit after local engine integration is configured; services use Docker.
 
+## Cell runtime: Docker Engine API stays; Kata and gVisor are variants only (2026-09-29)
+
+The user asked whether the cell runtime should move to containerd, Kata
+Containers, or gVisor for stronger isolation than Docker. Decision: leave the
+ideas as planned. Reasons, checked against primary docs on 2026-09-29:
+
+- Engine API and OCI runtime are independent axes. Docker Engine API and
+  containerd both hand the container to runc, so swapping engines changes no
+  isolation. Only the runtime handler (`runsc`, Kata) does, and Docker selects
+  one per container via a `runtimeType` entry in `daemon.json` plus
+  `HostConfig.Runtime`. The shared launcher prerequisite in
+  `docs/lessons/projects.md` therefore takes the runtime handler as a
+  parameter; it is a no-op under runc.
+- Kata needs KVM (excluded). Its default `disable_guest_seccomp = true`
+  (`src/runtime/Makefile`, `DEFDISABLEGUESTSECCOMP`) would silently void the
+  seccomp comparisons, and Unix sockets do not cross a VM boundary, which
+  breaks the peer-credential broker design.
+- gVisor needs no KVM and supports arm64, but the runsc binary must live
+  inside Docker Desktop's read-only LinuxKit VM. That install is an
+  unsupported hack; gVisor issue 11238 asking for a supported path has been
+  open since 2024-12. Its docs also state in-sandbox cgroups are accounting
+  only, so `noisy-neighbor-limits` would have to read host-side stats. A
+  worker's Unix connection would exit through gVisor's host process, so the
+  broker would see the sandbox's credentials rather than the fixed worker
+  UID (architectural inference, not verified).
+- The Muse-influenced broker and egress lessons assume a shared kernel for
+  kernel-supplied peer identity. Any per-cell kernel turns them into a
+  redesign (vsock or per-sandbox identity), not a runtime flip.
+
+The only place a `runsc` variant earns its keep is
+`container-namespace-boundary` (what a user-space kernel hides); it is recorded
+there as a blocked follow-up. Do not reopen this as a whole-runtime pivot
+without changing the KVM/Docker Desktop boundary first.
+
 This supersedes the earlier seven-idea portability review. The 42 ideas and
 five compositions in `docs/lessons/ideas.md` now use this design boundary.
 Lesson/platform code is Go only; Deno/TypeScript remains only for k6 tooling.

@@ -60,47 +60,53 @@ lease guide moved to `docs/lessons/planned/lease-reclaim.md`; its executable
 code blocks were preserved. This migration did not rerun the historical base
 experiment described above.
 
-## Idea tables (2026-09-29)
+## Idea entries and projects (2026-09-29)
 
-`docs/lessons/AGENTS.md` defines the backlog schema: one empty or populated
-table per platform aspect, organized by abstraction rather than vendor. Columns
-cover global impact Order, question/slug, comparison, invariant, measurement, software/readiness,
-research, and status/plan. Structure-only requests leave all tables without
-body rows. Existing plans remain valid when no corresponding idea row exists.
-The initial seeded ideas were removed at the user's request; the lease plan
-remains in planned. Verified by inspecting the new instructions and checking
-the table structure and local links.
+`docs/lessons/AGENTS.md` defines the backlog layout: `docs/lessons/ideas.md`
+holds one `###` entry per idea (slug heading, bold question, Compare,
+Invariant, Measure, Software, Options, optional Builds on and Plan lines)
+under one `##` section per platform aspect, organized by abstraction rather
+than vendor. There is no ranking or Order column; earlier versions carried a
+global 1..42 impact rank and per-aspect tables, removed on 2026-09-29 because
+the tables were hard to read on small screens and the rank added upkeep
+without guiding selection. The Options line lists combinations of configured
+software that could implement the idea and names any catalog row that still
+needs setup. Structure-only requests leave sections with their description and
+Research line and no entries. Existing plans remain valid when no matching
+entry exists. The current backlog has 47 ideas: 42 from the research passes
+plus five added from configured-but-unused catalog rows (`idle-sandbox-reaper`,
+`partitioned-owner-lease`, `pooled-connection-modes`, `image-layer-pull-cost`,
+`wal-change-feed`).
 
+Readiness corrections made the same day: Compose alone expresses shared or
+private PID namespaces (`pid: "service:<name>"`) and a fixture process tree,
+so `container-namespace-boundary` and `exec-cancel-reap` do not need the
+Docker Engine API; the usage ledger is lesson tables on the configured
+PostgreSQL, so its catalog row is `yes`; `surrogate-credential-broker` is ready
+with OpenBao and a plain Go worker, with only the container worker blocked.
 
-The initial backlog had three ideas per aspect (36 total); the Muse research
-adds six ideas, bringing the current total to 42. Order is a unique,
-consecutive global rank of platform-building learning impact, independent of
-readiness or status; each aspect displays rows in ascending order. The builder
-selects the smallest Order among eligible unplanned ideas unless directed
-otherwise. The lease entry links its existing plan. Blocked runtime and ledger
-ideas remain visible without changing catalog readiness. Verified row counts,
-unique slugs/ranks, contiguous ranking, links, and builder validation;
-these are candidate designs, not executed experiments.
-
-
-## Project compositions and side quests
-
-The bottom of `docs/lessons/ideas.md` contains five draft platforms with value,
-suggested lesson sequences, architecture diagrams, and component tables. Every
-node maps to existing idea slugs, Other gap IDs, or a fixture. Project build
-sequences may differ from global learning-impact order. The Other table holds
-12 tentative integration tasks (O01–O12), outside the lesson ranking until
-explicitly promoted to lessons. Client CLI/UI work is fully AI-generated and
-outside learning scope; backend contracts and authorization remain in scope.
+`docs/lessons/projects.md` holds five draft platforms. Each walks from the
+architecture diagram to Components (box, role, idea slugs, work chunk), Lessons
+needed in build order, Follow-up lessons, Work to bring it together (named
+chunks with Done-when conditions) and an Exit criterion. A Shared prerequisites
+section lists the configuration chunks blocked ideas point at (Go Docker client
+and isolation harness, Go S3 helper, Unix peer-identity harness, Unix-socket
+egress broker). The former Other table of O01–O12 side quests was folded into
+those per-project work chunks. The file marks the Durable automation service as
+"Start here" because all of its lessons are ready; `$create-lesson` prefers its
+Lessons needed when no idea is selected. Client CLI/UI work stays fully
+AI-generated and outside learning scope. Check cross-references after editing:
+every slug in projects.md must be a `###` heading in ideas.md, and every idea
+should appear in at least one project.
 
 Muse research lives in `docs/agentic-platforms/meta-muse.md`; that note separates
 published architecture from local experiments and unconfigured runtime needs.
-The software catalog was not changed by the research or project proposals.
 
-Verified 2026-09-29: all 42 lesson ranks are unique/contiguous; five project
-sources render into fresh embeds; final diagrams were visually inspected at
-70 and 80 columns with widths 54, 50, 43, 61 and 43. See
-[terminal diagrams](terminal-diagrams.md) for repository-local tooling and limits.
+Verified 2026-09-29: the five diagram embeds pass
+`render.py --check docs/lessons/projects.md` at default and 70-column widths
+after moving from ideas.md (marker paths are relative to the Markdown file, so
+a move within `docs/lessons/` needs no source change). See
+[terminal diagrams](terminal-diagrams.md).
 
 ## Go-only local baseline (2026-09-29)
 

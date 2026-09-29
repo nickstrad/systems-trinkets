@@ -10,23 +10,25 @@ is reserved for k6 tooling. Use Docker for backing services and local container
 harnesses; containerd/nerdctl is an allowed configured integration when useful.
 KVM-based tools and separately managed Linux VMs are outside scope.
 
-Keep potential projects in the aspect-based tables in [ideas.md](ideas.md),
-following [AGENTS.md](AGENTS.md). Empty tables are intentional until ideas are
-requested; existing plans remain valid without a matching backlog row.
-Each entry has a stable slug,
-a concrete question, the mechanism or comparison, required software, and
-optional links to [platform research](../agentic-platforms/README.md). Ideas can
-need unconfigured software; label the missing prerequisites. The readiness
-source of truth is [software/software.md](../../software/software.md), where
-`Configured: yes` means ready to use in a lesson. An idea's readiness label is
-only a convenience, and must be checked again when planning.
+Keep candidate lessons in [ideas.md](ideas.md), grouped by platform aspect
+and following [AGENTS.md](AGENTS.md); [projects.md](projects.md) groups ideas
+into potential platforms and lists the integration work between them. Empty
+sections are intentional until ideas are requested; existing plans remain
+valid without a matching idea entry. Each entry has a stable slug, a concrete
+question, the comparison, required software, and software options, and its
+section links the [platform research](../agentic-platforms/README.md). Ideas
+can need unconfigured software; label the missing prerequisites. The
+readiness source of truth is [software/software.md](../../software/software.md),
+where `Configured: yes` means ready to use in a lesson. An idea's readiness
+label is only a convenience, and must be checked again when planning.
 
-Use `$create-lesson` to choose the eligible unplanned idea with the smallest
-global `Order`, or name an idea explicitly. Order ranks platform-building
-impact across all aspect tables; it does not override software readiness. It writes one complete working guide in `planned/`: source code
+Use `$create-lesson` to build a ready unplanned idea, or name one explicitly.
+Without a selection it prefers the "Lessons needed" of the project marked
+"Start here" in projects.md; there is no global ranking. It writes one
+complete working guide in `planned/`: source code
 for the learner to type, terminal diagrams, run commands, DuckDB analysis,
 correctness checks, and an embedded optional k6 build plan. It updates the
-idea's status and link. It does not create the learner's executable files
+idea's Plan line. It does not create the learner's executable files
 unless asked. If no idea is eligible, it reports the missing prerequisites;
 setting up software is a separate task.
 
@@ -41,7 +43,7 @@ closing out the work should inspect the source and record the checks actually
 run, or the learner's explicit completion report, with a date in the guide.
 If verification cannot run, record that limitation instead of claiming a pass.
 Unfinished implementation or known failing invariants remain in planned.
-Update the matching idea row's status/link when present, the guide's own paths,
+Update the matching idea's Plan line when present, the guide's own paths,
 and other inbound links.
 Do not overwrite a completed guide or create a second copy of the plan.
 
