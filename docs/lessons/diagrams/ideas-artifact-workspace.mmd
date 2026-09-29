@@ -1,0 +1,9 @@
+%% draw-visual: -x 3 -y 1 -p 0
+graph TD
+  U[G1 publish session] --> B1[Upload objects]
+  B1 --> C[G2 manifest commit]
+  C --> M[Revision write]
+  R[G3 read resolver] --> MR[Revision read]
+  MR --> B2[Read objects]
+  G[G4 collector] --> MG[Retention scan]
+  MG --> B3[Expired objects]

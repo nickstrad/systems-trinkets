@@ -2,7 +2,25 @@
 
 Small, self-contained lessons for building systems engineering skills. Each lesson
 takes one systems or distributed-systems concept and works it out in a small
-program, written in **Go** or **Deno** (TypeScript). The repo grows one lesson at a time.
+program, written in **Go**. The repo grows one lesson at a time.
+
+All lesson and full-project designs target local macOS with Docker Desktop/Compose
+and Go, plus the existing DuckDB/k6 tools. Deno/TypeScript is used only
+for k6 orchestration and workloads. Containerd/nerdctl is allowed when a lesson
+benefits from its lower-level API and the local engine is configured. Linux-specific harnesses run
+inside containers. Firecracker, KVM and separately managed VM runtimes are out
+of scope for now. Proposed integrations still need implementation and validation.
+
+## Plan the next lesson
+
+Keep candidates in [lesson ideas](docs/lessons/ideas.md). `$create-lesson`
+turns an existing idea into a complete working guide in
+[`docs/lessons/planned/`](docs/lessons/planned/), using only configured software.
+The [lease-reclaim plan](docs/lessons/planned/lease-reclaim.md) is ready to work.
+After the base lesson is finished, move its guide to
+[`docs/lessons/completed/`](docs/lessons/completed/).
+See the [lifecycle](docs/lessons/README.md), [skills](docs/skills.md), and
+[platform architecture research](docs/agentic-platforms/README.md).
 
 ## Two ways to learn each lesson
 
@@ -30,7 +48,6 @@ Available walkthroughs:
 - [Completed job counter](lessons/go/completed-job-counter/perf/README.md): duplicates and idempotency.
 - [SQLite WAL](lessons/go/sqlite-wal-lab/perf/README.md): writes while a reader holds a snapshot.
 - [Pipelining work](lessons/go/pipelining-work/perf/README.md): round trips amortized by a Valkey pipeline.
-- [Cross-store failure](lessons/deno/cross-store-failure/perf/README.md): injected failures and repair.
 
 For future completed lessons, invoke `$add-basic-k6-testing` with the lesson path
 to add the same follow-up workflow.
@@ -40,7 +57,7 @@ to add the same follow-up workflow.
 Every `make` command runs from the repo root. The Makefile discovers lessons
 from the filesystem, so a new lesson directory needs no Makefile edit:
 
-- `lessons/go/<name>/main.go` or `lessons/deno/<name>/main.ts` gives the lesson
+- `lessons/go/<name>/main.go` gives the lesson
   its `run-`, `analyze-`, and `lab-` targets.
 - `lessons/<runtime>/<name>/perf/k6.ts` adds the `serve-`, `k6-`,
   `analyze-k6-`, and `lab-k6-` targets.
@@ -53,7 +70,7 @@ are currently discovered. Use it whenever you are unsure what a name is.
 | Stage | Required tools |
 |---|---|
 | Services | Docker with `docker compose` |
-| Base lesson | Go (Go lessons), Deno (Deno lessons), `duckdb` CLI for `analyze-` |
+| Base lesson | Go, `duckdb` CLI for `analyze-` |
 | HTTP/k6 follow-up | Everything above plus `k6` and Deno (the runner is `scripts/perf/run.ts`) |
 | `make check` | Go and Deno |
 
@@ -91,7 +108,7 @@ These run the original lesson: its experiment and its DuckDB analysis. Using
 
 | Command | What it runs | When to use it |
 |---|---|---|
-| `make run-cache-aside` | `cd lessons/go/cache-aside && go run .` (a Deno lesson runs `deno run -A main.ts` from `lessons/deno/<name>`) | Execute the experiment. Prints progress and writes `measurements.csv` in the lesson directory, overwriting the previous run. |
+| `make run-cache-aside` | `cd lessons/go/cache-aside && go run .` | Execute the experiment. Prints progress and writes `measurements.csv` in the lesson directory, overwriting the previous run. |
 | `make analyze-cache-aside` | `cd lessons/go/cache-aside && duckdb < analyze.sql` | Load that CSV into DuckDB and print one labelled table per query. Needs a `measurements.csv` from an earlier run. Rerun it as often as you like without repeating the experiment. |
 | `make lab-cache-aside` | `run-` then `analyze-` | The normal way to work a lesson: fresh numbers in one command. |
 
@@ -110,7 +127,7 @@ DATABASE_URL=postgres://trinkets:trinkets@localhost:15432/trinkets make run-cach
 ### 3. HTTP/k6 follow-up: `lab-k6-`, `serve-`, `k6-`, `analyze-k6-`
 
 These wrap a completed lesson's core logic in a small HTTP adapter
-(`perf/main.go` or `perf/server.ts`) and drive it with k6. All four targets call
+(`perf/main.go`) and drive it with k6. All four targets call
 `scripts/perf/run.ts`, a Deno script that builds or starts the server, waits
 for it, runs k6, saves artifacts, analyzes the CSV, and stops its own server.
 
@@ -171,7 +188,7 @@ mechanisms and relative changes, not production capacity.
 
 | Command | What it runs | When to use it |
 |---|---|---|
-| `make check` | `go vet ./...` and `deno check .` | Compile-check every Go lesson and adapter, every Deno lesson, the perf runner, and every k6 workload without starting a service. Run it before committing and after editing shared helpers. |
+| `make check` | `go vet ./...` and `deno check .` | Compile-check every Go lesson and adapter, the k6 lifecycle runner, and every k6 workload without starting a service. Run it before committing and after editing shared helpers. |
 
 Deno type-checks the k6 workloads against `@types/k6` through the root
 `deno.json`; k6 itself runs the same `.ts` files.
@@ -185,28 +202,20 @@ Deno type-checks the k6 workloads against `@types/k6` through the root
 | `completed-job-counter` | `make up-postgres` | `make lab-completed-job-counter` | `make lab-k6-completed-job-counter` | `MODE=naive` |
 | `sqlite-wal-lab` | none | `make lab-sqlite-wal-lab` | `make lab-k6-sqlite-wal-lab` | `MODE=DELETE` (fails on purpose) |
 | `pipelining-work` | `make up-valkey` | `make lab-pipelining-work` | `make lab-k6-pipelining-work` | `MODE=sequential`, `BATCH_SIZE=1000` |
-| `cross-store-failure` | `make up-postgres up-seaweedfs` | `make lab-cross-store-failure` | `make lab-k6-cross-store-failure` | `MODE=put_then_insert` |
 
 `make help` lists the current lesson names.
 
 ## Layout
 
-Lessons live under `lessons/<runtime>/<name>/`: Go lessons in `lessons/go/`,
-Deno lessons in `lessons/deno/`. Each lesson directory has a `main.go` or
-`main.ts` that writes `measurements.csv`, and an `analyze.sql` that DuckDB
-runs over it. The few helpers every lesson needs (service URLs with env
-overrides, the CSV writer) exist once per runtime with the same shape:
+Lessons live under `lessons/go/<name>/`. Each has `main.go`, a reusable
+`core/` package, `measurements.csv`, and `analyze.sql`. One root `go.mod`
+serves all lessons. Shared helpers live in `internal/lab`, with PostgreSQL
+and Valkey clients in their own subpackages. The Go S3 client is not configured.
 
-| | Go | Deno |
-|---|---|---|
-| Toolchain root | `go.mod` (repo root, one module) | `deno.json` (repo root: workspace and k6 types, one lockfile) with `lessons/deno/deno.json` as the lesson import map |
-| Shared helpers | `internal/lab` (`lab.Env`, `lab.Check`, `lab.NewMeasurements`) | `lessons/deno/lab/lab.ts` (`env`, `sleep`, `mapConcurrent`, `Measurements`) |
-| Postgres | `internal/lab/postgres` (`postgres.Connect`) | `lab/postgres.ts` (`postgres.connect`) |
-| Valkey | `internal/lab/valkey` (`valkey.Connect`) | `lab/valkey.ts` (`valkey.connect`) |
-| SeaweedFS (S3) | not yet needed by a Go lesson | `lab/seaweedfs.ts` (`connect`, `ensureBucket`, `listObjects`, `listKeys`, `exists`, `deleteKeys`) |
+TypeScript is limited to `scripts/perf/` and each lesson's `perf/k6.ts`.
+The root `deno.json` supplies k6 types; it has no lesson workspace members.
+HTTP adapters remain Go programs in `perf/main.go`.
 
-Each current lesson separates reusable operations from its experiment runner:
-Go lessons expose a `core/` package, and the Deno lesson exposes `core.ts`.
 The runner owns connections, fixtures, resets, and CSV reporting; the
 `perf/` adapter calls the same operations with its own clients. See
 [lesson core entry points](knowledge/lesson-cores.md).

@@ -7,7 +7,7 @@ See [README](../README.md) for the two learning stages and command table.
 
 ## Shared pieces and commands
 
-- [Makefile](../Makefile) discovers `lessons/*/*/perf/k6.ts` and adds
+- [Makefile](../Makefile) discovers `lessons/go/*/perf/k6.ts` and adds
   `serve-`, `k6-`, `analyze-k6-`, and `lab-k6-` targets; `make help` lists them.
   Start backing services with their existing `up-` targets first. `lab-k6-*`
   defaults to a ten-second smoke.
@@ -23,7 +23,7 @@ See [README](../README.md) for the two learning stages and command table.
   `optionsFor(defaults, extra)` for a lesson default rate, p95 budget, or k6
   option such as `batch`) and add only the operation, its invariant, and the
   custom metric. Both are TypeScript: k6 runs them as-is and `deno check .`
-  types them through the root `deno.json` (see [deno-lessons.md](deno-lessons.md)).
+  types them through the root `deno.json`.
   Helpers: `request(method, path, tags)` merges the tags with
   `name: operation` (`operationParams(tags)` gives the same params to
   `http.batch`); `assertResponse<T>` runs the two checks and returns the
@@ -55,11 +55,6 @@ See [README](../README.md) for the two learning stages and command table.
   through `Int`/`Choice` is reported by `GET /health` as `settings`, which is
   where `settings.json` comes from. Adapters call the
   [existing cores](lesson-cores.md) and own initialization and HTTP mapping.
-- The Deno adapter uses `postgres.pool(max, options)` from
-  [lab/postgres.ts](../lessons/deno/lab/postgres.ts): `options` are Postgres
-  startup parameters (`-c search_path=... -c statement_timeout=5000`), so every
-  pooled connection starts in the private schema without a `set` round trip.
-
 Run artifacts live in ignored `perf/results/<run-id>/`: CSV, JSON summary,
 effective workload options, settings, final domain state, and logs. The newest
 run directory that holds `metrics.csv` is the default for `analyze-k6-*` (run
@@ -82,11 +77,10 @@ artifacts. Defaults belong in the consumer (`workload.ts`, `perf.Int`,
 
 ## Isolation and interpretation
 
-Go Postgres adapters set pool search_path to their random `perf_*` schema; the
-Deno adapter does the same through pool startup options. Cleanup drops only
-that schema. Cache profiles use a unique key; S3 adapters use a unique prefix;
+Go Postgres adapters set pool search_path to their random `perf_*` schema. Cleanup drops only
+that schema. Cache profiles use a unique key;
 SQLite uses a temporary database. Normal shutdown cleans these fixtures. A
-forced kill can leave them behind; server logs identify Postgres/S3 fixtures.
+forced kill can leave them behind; server logs identify Postgres fixtures.
 Never clean the entire backing service to reset a performance experiment.
 
 Every lesson's contrast is a tagged per-request variant in one run, except
@@ -121,13 +115,6 @@ of runs (remade 2026-09-28 with the
   `operation_ms` tagged by `source`; a request cannot be tagged after it is
   sent. `redundant_misses` counts stampedes; the default round-robin never
   produces one. Avoid a TTL that is a multiple of the per-key read interval.
-- **cross-store-failure (Deno):** `?variant=<write order>&crash=0|1`, one
-  schema, S3 sub-prefix, and `createOperations` per variant, because
-  metadata rows are not prefix-scoped and another variant's rows would look
-  dangling to the reconciler. `/repair` answers 409 while uploads are in
-  flight and keeps the pre-repair measurement so `domain.json` holds both
-  states. The base lesson's grace experiment is deliberately not repeated.
-
 Custom tags on a request or a custom metric land in the CSV `extra_tags`
 column as `key=value&key=value`; system tags such as `name` keep their own
 columns. `tag(extra_tags, 'variant')` splits samples by variant (verified
@@ -152,11 +139,10 @@ resources do not establish production capacity or long-term reliability.
 
 ## Verification, 2026-09-27
 
-- `make check` passed with all Go adapters, the Deno server, and `run.ts`.
+- `make check` passed with the Go adapters and k6 runner `run.ts`.
 - After the `.js` to `.ts` conversion (same day): `make check` passed from the
   root, `k6 inspect` parsed all five `k6.ts`, `PROFILE=bogus` still fails
-  before traffic, and three-second `lab-k6-cache-aside` and
-  `lab-k6-cross-store-failure` smokes passed with all checks.
+  before traffic, and a three-second `lab-k6-cache-aside` smoke passed with all checks.
 - Three-second `lab-k6-*` smokes passed for all five lessons with real local
   services and DuckDB, including `MODE=blocking` for the queue.
 - SQLite `MODE=DELETE` with `DURATION_S=2` produced failed writes; the shared
@@ -183,7 +169,7 @@ resources do not establish production capacity or long-term reliability.
 - No `perf:pipeline:*` keys remained in Valkey after the server shut down.
 - Stress, spike, and soak were not executed for this lesson.
 
-## Verification, 2026-09-28 (all six perf/ directories remade)
+## Verification, 2026-09-28 (performance adapters remade; retained Go results)
 
 Each lesson ran `make check`, `k6 inspect`, a `PROFILE=bogus` failure before
 traffic, a ten-second smoke, and a twenty-second `PROFILE=load` at the default
@@ -204,11 +190,6 @@ remained. Load numbers (p50 of the server's core timing unless noted):
   pool warm-up, `BUSY_MS=2000` produced 503s from connection setup.
 - cache-aside, pair of runs: `TTL_MS=30000` hit rate 90%, `TTL_MS=3000` 50%;
   miss-to-hit ratio 2.1 and 2.3 (base 3.2).
-- cross-store-failure: each order left only its own failure class and all
-  three were consistent after repair; `intent_then_put` kept every upload,
-  the others `uploads - crashed`; the pending repair checked 8x fewer items
-  but cost more per item.
-
 **Idle gaps inflate core timing.** Every lesson's core time under k6 was above
 the base runner's: sequential batches 62 ms at one VU vs 35 ms back to back,
 cache hits 1.2 ms vs 0.4 ms, first deliveries 3.2 ms vs retries 1.5 ms in the
@@ -220,3 +201,21 @@ runs, and the base CSV with the base CSV.
 
 Stress, spike, and soak were not executed for any lesson. Do not compare the
 smoke numbers as benchmarks; they verify wiring and invariants.
+
+## Go-only lesson boundary (2026-09-29)
+
+Deno/TypeScript remains only for k6 orchestration, workloads and type-checking.
+The runner always builds a Go HTTP adapter. The root config has no lesson
+workspace members; the lockfile retains k6 types only. VS Code still uses
+the Deno extension for these TypeScript files. Go lesson discovery and all
+five retained k6 targets continue through the root Makefile.
+
+Verified 2026-09-29 on Linux: `make check` passed (Go vet and all seven k6
+TypeScript files); k6 v2.3.0 inspected all five workloads. A two-second
+`make lab-k6-sqlite-wal-lab DURATION_S=2` in a temporary source copy passed
+20 checks with 9 operation requests, both variants, zero HTTP failures and
+zero invariant differences. DuckDB analysis completed and the Go adapter
+removed its temporary database directory. The scratch copy needed
+`GOFLAGS=-buildvcs=false` because it had no usable Git metadata; repository
+build settings were unchanged. No Mac runtime or new container harness was
+validated by this smoke test.

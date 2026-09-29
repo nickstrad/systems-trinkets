@@ -17,9 +17,7 @@
 # Services: postgres, valkey, seaweedfs, nats, etcd, registry, toxiproxy, temporal, openbao, pgbouncer (see software/software.md)
 
 SERVICES     := postgres valkey seaweedfs nats etcd registry toxiproxy temporal openbao pgbouncer
-GO_LESSONS   := $(patsubst lessons/go/%/main.go,%,$(wildcard lessons/go/*/main.go))
-DENO_LESSONS := $(patsubst lessons/deno/%/main.ts,%,$(wildcard lessons/deno/*/main.ts))
-LESSONS      := $(GO_LESSONS) $(DENO_LESSONS)
+LESSONS      := $(patsubst lessons/go/%/main.go,%,$(wildcard lessons/go/*/main.go))
 
 compose_file_postgres  := software/postgres.compose.yaml
 compose_file_valkey    := software/valkey.compose.yaml
@@ -43,28 +41,24 @@ help:
 	@echo "  services: $(SERVICES)"
 
 # Explicit per-lesson rules, for the same reason as the service rules below.
-# A lesson is lessons/go/<name>/main.go or lessons/deno/<name>/main.ts plus an
-# analyze.sql; the directory picks the runtime. Both run from inside that
+# A lesson is lessons/go/<name>/main.go plus analyze.sql. Run inside that
 # directory because measurements.csv and analyze.sql use relative paths.
-run_go   := go run .
-run_deno := deno run -A main.ts
 
 define lesson_rules
 .PHONY: run-$(1) analyze-$(1) lab-$(1)
 run-$(1):
-	cd lessons/$(2)/$(1) && $(run_$(2))
+	cd lessons/go/$(1) && go run .
 analyze-$(1):
-	cd lessons/$(2)/$(1) && duckdb < analyze.sql
+	cd lessons/go/$(1) && duckdb < analyze.sql
 lab-$(1): run-$(1) analyze-$(1)
 endef
 
-$(foreach l,$(GO_LESSONS),$(eval $(call lesson_rules,$(l),go)))
-$(foreach l,$(DENO_LESSONS),$(eval $(call lesson_rules,$(l),deno)))
+$(foreach l,$(LESSONS),$(eval $(call lesson_rules,$(l))))
 
-# Only lessons with a workload gain performance targets; run.ts picks the
-# runtime from the lesson directory. Settings such as PROFILE=load or MODE=blocking
+# Only Go lessons with a workload gain performance targets.
+# Settings such as PROFILE=load or MODE=blocking
 # reach the recipe from the make command line or the environment as-is.
-PERF_LESSONS := $(patsubst %/perf/k6.ts,%,$(wildcard lessons/*/*/perf/k6.ts))
+PERF_LESSONS := $(patsubst %/perf/k6.ts,%,$(wildcard lessons/go/*/perf/k6.ts))
 
 define perf_rules
 .PHONY: serve-$(2) k6-$(2) analyze-k6-$(2) lab-k6-$(2)

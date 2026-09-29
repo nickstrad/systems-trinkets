@@ -470,5 +470,5 @@ Then invoke:
 
 ```text
 $add-basic-k6-testing lessons/go/lease-reclaim
-Use the k6 build plan in docs/lessons/lease-reclaim.md.
+Use the k6 build plan in docs/lessons/planned/lease-reclaim.md.
 ```

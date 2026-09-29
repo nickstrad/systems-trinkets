@@ -1,0 +1,8 @@
+%% draw-visual: -x 3 -y 1 -p 0
+graph TD
+  R[Untrusted runtime cell] -->|request| B[G1 peer broker]
+  B --> G[G2 action gate]
+  G --> A[G3 connector]
+  A --> T[Fixture service]
+  G -->|claim| P[Approval grants and audit]
+  A -->|redeem| K[G4 credential store]

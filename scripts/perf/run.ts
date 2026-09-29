@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 // Local performance lifecycle: serve, run, analyze, or the combined lab.
-//   deno run -A scripts/perf/run.ts <serve|run|analyze|lab> lessons/<runtime>/<lesson>
+//   deno run -A scripts/perf/run.ts <serve|run|analyze|lab> lessons/go/<lesson>
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname!, "../..");
@@ -118,29 +118,24 @@ async function main(): Promise<number> {
       override ? path.resolve(override) : latestRun(results),
     );
   }
-  const isGo = exists(path.join(lesson, "main.go"));
   if (action !== "serve") require("k6");
   if (action === "lab") require("duckdb");
   const env = Deno.env.toObject();
   let serverArgv: string[] = [];
   if (action !== "run") {
-    if (isGo) {
-      require("go");
-      // One binary per lesson; run directories hold only logs and metrics.
-      await Deno.mkdir(results, { recursive: true });
-      const binary = path.join(results, "server");
-      const build = await command(["go", "build", "-o", binary, "./perf"], {
-        cwd: lesson,
-        stdout: "inherit",
-        stderr: "inherit",
-      }).output();
-      if (build.code !== 0) throw new Failure("go build failed");
-      serverArgv = [binary];
-    } else {
-      require("deno");
-      serverArgv = ["deno", "run", "-A", path.join(lesson, "perf/server.ts")];
-    }
+    require("go");
+    // One binary per lesson; run directories hold only logs and metrics.
+    await Deno.mkdir(results, { recursive: true });
+    const binary = path.join(results, "server");
+    const build = await command(["go", "build", "-o", binary, "./perf"], {
+      cwd: lesson,
+      stdout: "inherit",
+      stderr: "inherit",
+    }).output();
+    if (build.code !== 0) throw new Failure("go build failed");
+    serverArgv = [binary];
   }
+
   if (action === "serve") {
     // Ctrl-C reaches the server through the terminal's process group; keep this
     // process alive until the server has drained so make sees its exit status.

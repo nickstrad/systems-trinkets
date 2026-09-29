@@ -24,7 +24,7 @@ the default URL against `make up-valkey`.
 
 ## Lease experiments
 
-The code in [lease-reclaim.md](../docs/lessons/lease-reclaim.md) uses `SetNX`
+The code in [lease-reclaim.md](../docs/lessons/planned/lease-reclaim.md) uses `SetNX`
 with zero expiry for the baseline and a positive TTL for the lease. Validate
 lease TTLs before the call: zero must not silently create permanent ownership.
 Renewal compares the owner token and applies `PEXPIRE` in one Lua operation.

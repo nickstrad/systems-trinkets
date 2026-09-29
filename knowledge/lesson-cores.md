@@ -11,7 +11,6 @@ Import the core instead of invoking the entire lesson per request.
 | [completed-job-counter/core/core.go](../lessons/go/completed-job-counter/core/core.go) | `Apply(ctx, db, strategy, id)` returns total, applied, error; construct strategies with `Naive()` or `Idempotent()` |
 | [sqlite-wal-lab/core/core.go](../lessons/go/sqlite-wal-lab/core/core.go) | `OpenSnapshot(ctx, db)` returns a transaction and row count; `WriteEvent(ctx, db)` returns timed write outcome and setup error |
 | [pipelining-work/core/core.go](../lessons/go/pipelining-work/core/core.go) | `IncrementSequential(ctx, store, keys)` and `IncrementPipelined(ctx, store, keys)` return only an error; `Sum(ctx, store, keys)` reads every counter back with one MGET so runners and adapters verify stored state, not INCR replies. `Store` is three go-redis methods, satisfied by `*redis.Client` |
-| [cross-store-failure/core.ts](../lessons/deno/cross-store-failure/core.ts) | `createOperations({pg, s3, bucket, prefix, concurrency})` returns `upload`, `measure`, the three reconcilers, and the mode-to-repair map |
 
 Go packages are importable under
 `github.com/nickstrad/systems-trinkets/lessons/go/<lesson>/core`.
@@ -26,7 +25,7 @@ Keep these existing semantics in mind:
   the sequential runner carries forward its last observed total for reporting.
 - Queue `Claim.Took` measures the claim query, excluding simulated processing.
   An empty queue returns `pgx.ErrNoRows`. Processing retains the lesson's sleep.
-- Every core exports its table DDL (`core.Schema`, or `schema` in Deno) so the
+- Every core exports its table DDL (`core.Schema`) so the
   lesson runner and the perf adapter create identical tables; callers still own
   dropping, truncating, and seeding. SQLite's `core.DSN(path, mode, busyMs)`
   builds the modernc DSN with per-connection pragmas; callers own driver
@@ -38,14 +37,6 @@ Keep these existing semantics in mind:
   `Sum`, so they cannot disagree on the format. A pipeline is not atomic: on
   error, earlier INCRs may already be applied. `Sum` counts a missing key as
   zero.
-- Deno core import and factory construction perform no I/O. The caller owns
-  client lifecycle and bucket setup. Its fixed metadata `table` and the
-  `schema` that creates it are exported for setup; the supplied prefix scopes
-  S3 listings, not metadata rows.
-  A simulated crash preserves the lesson's early return; it is not a thrown
-  dependency failure. Reconciliation still follows the lesson's assumptions
-  about in-flight work and grace windows.
-
 Adapter notes from the 2026-09-28 perf remake (cores unchanged):
 
 - A core whose SQL names its table without a schema (queue, counter) cannot
@@ -59,11 +50,6 @@ Adapter notes from the 2026-09-28 perf remake (cores unchanged):
   connection first.
 - `core.Work`'s processing sleep ignores context cancellation; a cancelled
   request holds its row lock for the full work time before rolling back.
-- The Deno core's metadata rows carry no prefix, so `measure()` and the
-  dangling reconciler see every row in the schema; one schema per variant.
-
-Verified 2026-09-27: `make check` passed (Go vet and Deno type checking); importing
-`core.ts` with `deno eval --cached-only` completed without running the lesson;
-`make -n` retained all five run commands and all three service startup commands.
-The Makefile and CSV analysis scripts were not changed by this refactor.
-Full experiments against backing services were not rerun for this change.
+Historical Go core extraction kept runners responsible for fixtures and CSV.
+Current build verification is recorded in the Go-only baseline entry of
+[performance-labs.md](performance-labs.md).

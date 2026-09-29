@@ -1,0 +1,9 @@
+%% draw-visual: -x 3 -y 1 -p 0
+graph TD
+  I[G1 run intake] --> P[Run state, timers, signals]
+  P --> D[G2 wakeup dispatcher]
+  D --> W[Step worker]
+  W --> H[G4 checkpoint writer]
+  H --> U[Run state update]
+  W --> E[G3 effect adapter]
+  E --> S[Fixture service]

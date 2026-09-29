@@ -28,11 +28,13 @@ row says `Configured: yes`. That covers the runtimes, the compose-backed
 services started with `make up-<service>`, and built-in features of those
 services. Do not use software marked `no`, do not ask the learner to install
 anything, and do not add compose files, module manifests, or Docker
-configuration as part of a lesson. If the best idea needs unconfigured
-software, either choose another idea or say plainly which catalog row would
-need to be configured first, then choose another idea.
+configuration as part of a lesson. If an idea needs unconfigured
+software, keep it in `docs/lessons/ideas.md` with its missing prerequisites.
+For an explicitly requested idea, report the blocker; for an automatic
+selection, choose another eligible existing idea. Do not substitute silently.
 
-Use Go or TypeScript with Deno. Choose one or at most two primary services
+Use Go only for lesson cores, runners and HTTP adapters. Deno/TypeScript is
+reserved for k6 tooling. Follow the repository local Mac/container boundary. Choose one or at most two primary services
 from the configured rows. Choose storage to fit the problem: PostgreSQL when a
 relational database is needed; Valkey-only, object-storage-only, or
 queue-only systems are welcome. Never use SQLite in a new lesson, even though
@@ -42,15 +44,19 @@ measurements; analysis-only DuckDB does not count toward the primary limit.
 Whenever connection details appear, copy them from the catalog's `Setup`
 column with full credentials; they are fixed local development values.
 
-Vary the language, primary service, architecture, mechanism, and measured
+Vary the primary service, architecture, mechanism, and measured
 property across the lessons that exist in the repo. Favor fresh topics or
 clearly explain the new angle.
 
 ## Repository layout and commands
 
-Choose a short, descriptive, lowercase kebab-case slug, unique across both
-runtimes and `docs/lessons/`. It becomes the directory name and the Make
+Choose a short, descriptive, lowercase kebab-case slug, unique across existing Go lessons
+and the planned/completed guides in `docs/lessons/`. It becomes the directory name and the Make
 target suffix. There are no lesson numbers.
+
+Author the complete guide at `docs/lessons/planned/<slug>.md`; link its
+existing idea in `docs/lessons/ideas.md`. Follow `docs/lessons/README.md` for
+completion and archival. The source paths below are for the learner to type.
 
 Go lessons:
 
@@ -58,36 +64,26 @@ Go lessons:
     lessons/go/<slug>/core/core.go
     lessons/go/<slug>/analyze.sql
 
-Deno lessons:
-
-    lessons/deno/<slug>/main.ts
-    lessons/deno/<slug>/core.ts
-    lessons/deno/<slug>/analyze.sql
-
 Use only additional files essential to the concept. The repo has one root Go
-module, `github.com/nickstrad/systems-trinkets`, and one Deno workspace with
-`lessons/deno/deno.json` as its member import map. Do not create per-lesson
-`go.mod`, `deno.json`, lockfiles, Compose files, or Makefiles. Prefer drivers
-already in `go.mod` or the import map; if a new dependency is essential, name
-the shared dependency change explicitly instead of assuming a helper exists.
+module, `github.com/nickstrad/systems-trinkets`. Do not create per-lesson
+module manifests, lockfiles, Compose files or Makefiles. Prefer drivers already
+in `go.mod`; explicitly name any essential shared dependency change.
 
-All Make commands run from the repo root. New `main.go` and `main.ts` files
+All Make commands run from the repo root. New `main.go` files
 are discovered automatically:
 
     make run-<slug>       runs the experiment
     make analyze-<slug>   runs DuckDB over analyze.sql
     make lab-<slug>       runs the experiment and then the analysis
 
-The recipes change into the lesson directory before running `go run .` or
-`deno run -A main.ts`, and `duckdb < analyze.sql`. Write `measurements.csv` in
+The recipes change into the lesson directory before running `go run .` and `duckdb < analyze.sql`. Write `measurements.csv` in
 that directory, overwriting the previous run. Analyze it with relative paths.
 Show concrete commands with the chosen slug, never placeholders. Start only
 the services the lesson needs, with their `make up-<service>` targets.
 
 ## Existing helpers: import them, do not reimplement them
 
-The current source is authoritative; inspect `internal/lab/` and
-`lessons/deno/lab/` on every invocation. As of this writing they provide:
+The current source is authoritative; inspect `internal/lab/` on every invocation. As of this writing they provide:
 
 Go, under `github.com/nickstrad/systems-trinkets/internal/lab`:
 
@@ -102,27 +98,15 @@ Go, under `github.com/nickstrad/systems-trinkets/internal/lab`:
     valkey.URL() string
     valkey.Connect(ctx) *redis.Client       // go-redis/v9, pings
 
-There is no shared Go SeaweedFS helper; choose Deno for a compact S3 lesson
-or supply the client setup explicitly. Import a Go core as
+There is no configured Go S3 client/helper yet. Keep S3 ideas blocked on that
+catalog entry until it is configured; do not silently substitute another
+language. Import a Go core as
 `github.com/nickstrad/systems-trinkets/lessons/go/<slug>/core`.
-
-Deno, from the `lab/` import map entry:
-
-    import { env, sleep, mapConcurrent, Measurements } from "lab/lab.ts";
-    import * as postgres from "lab/postgres.ts";   // url(), connect(), pool(max, options?)
-    import * as valkey from "lab/valkey.ts";       // url(), connect()
-    import * as seaweedfs from "lab/seaweedfs.ts"; // url(), connect(), ensureBucket,
-                                                   // listObjects, listKeys, exists, deleteKeys
-
-The import map supplies `pg`, `redis`, and `@aws-sdk/client-s3`. Direct
-imports from `pg` need `// @ts-types="npm:@types/pg@^8"` above the import.
-Use top-level await in `main.ts`, import the core from `./core.ts`, and close
-resources in `finally`. Time with `performance.now()`.
 
 Services without a helper yet (for example NATS, etcd, Temporal, Toxiproxy,
 OpenBao, PgBouncer, the registry) are still usable when configured: name the
 client package, show the connection setup in the runner, and state the
-`go.mod` or import-map addition if one is needed.
+`go.mod` addition if one is needed.
 
 ## Core and experiment: keep the future k6 adapter easy
 
@@ -130,8 +114,7 @@ The standalone lesson must finish and teach its concept with
 `make lab-<slug>`, without an HTTP server or k6. Separate the reusable
 operation from its small experiment runner:
 
-- `core/core.go` uses `package core`; `core.ts` exports functions or a small
-  factory. Export shared DDL as `Schema` (Go) or `schema` (Deno) when needed.
+- `core/core.go` uses `package core`. Export shared DDL as `Schema` when needed.
 - The core accepts caller-owned clients and explicit inputs and settings,
   performs the actual operation, and returns a small useful result plus
   errors. Distinguish expected outcomes (duplicate, miss, empty queue,
@@ -143,7 +126,7 @@ operation from its small experiment runner:
   operations must not reset fixtures, print, write CSV, or exit.
 - Keep transactions inside the operation when they express the mechanism.
   In Go, a small interface over the needed pgx methods lets a connection or
-  pool be passed. In Deno, keep each transaction on one checked-out client.
+  pool be passed.
   Concurrent transactions need separate connections.
 - Use lesson-specific tables, keys, subjects, buckets, and object prefixes.
   Reset only this lesson's fixtures. Make key and prefix construction

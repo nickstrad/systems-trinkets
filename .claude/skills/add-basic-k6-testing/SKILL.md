@@ -1,6 +1,6 @@
 ---
 name: add-basic-k6-testing
-description: Turn a completed systems-trinkets lesson into an HTTP adapter, a k6 workload, and a DuckDB analysis that re-run the lesson's own comparison under concurrent traffic. Use when asked to add k6 testing, a performance follow-up, or a load test to a lesson in lessons/go or lessons/deno. Starts from the lesson's core, its invariant, and its analyze.sql; does not implement the base lesson for the learner.
+description: Turn a completed systems-trinkets lesson into an HTTP adapter, a k6 workload, and a DuckDB analysis that re-run the lesson's own comparison under concurrent traffic. Use when asked to add k6 testing, a performance follow-up, or a load test to a lesson in lessons/go. Starts from the lesson's core, its invariant, and its analyze.sql; does not implement the base lesson for the learner.
 ---
 
 # Add basic k6 testing
@@ -22,17 +22,21 @@ has not been built yet.
 
 Read `AGENTS.md`, `knowledge/index.md`, `knowledge/lesson-cores.md`, and
 `knowledge/performance-labs.md`. Start the `trinkets-work-log` skill. Then read
-the lesson itself: `core/core.go` or `core.ts`, `main.go` or `main.ts`,
+the lesson itself: `core/core.go`, `main.go`,
 `analyze.sql`, and the current `measurements.csv`. Write these five lines into
 the work log before designing anything; every later choice is checked against
 them.
 
-Read `docs/lessons/<slug>.md` (or a user-supplied guide path) when present;
+Read `docs/lessons/completed/<slug>.md`, falling back to
+`docs/lessons/planned/<slug>.md` (or a user-supplied guide path) when present;
 its `k6 build plan` section is the implementation brief. Also read a
 lesson-local `K6_PLAN.md` if one exists. Follow the plan's workload phases,
 metrics, isolation, and acceptance criteria after
 checking them against the actual core and measurements. Update stale parts
 of the plan when the base lesson has changed, explaining the adjustment.
+If the base lesson is finished but its guide is still in planned, follow
+`docs/lessons/README.md` to move it and update links. k6 is optional and is
+not the completion gate for the base plan.
 For lessons created with `$create-lesson`, keep the follow-up README focused
 on run commands and interpreting the comparison; an extended writeup is
 unnecessary.
@@ -90,17 +94,17 @@ stats and repair traffic. Do not write a second request helper.
 
 ## 3. Wrap the core, not the runner
 
-- Import the existing `core/` package or `core.ts`; `knowledge/lesson-cores.md`
+- Import the existing `core/` package; `knowledge/lesson-cores.md`
   lists each entry point and its result contract. Extract more only if the
   chosen operation is still coupled to the runner, and then reuse it in the
-  runner too. Importing a `main.ts` executes the experiment; a server never does.
+  runner too. A server calls the core; it never reruns the experiment entry point.
 - The adapter owns clients (created once, closed on shutdown), a unique
   fixture per server (private schema, key prefix, temporary database), and
   readiness. Fixture resets, experiment loops, CSV, and panics on dependency
   errors stay out of request handlers. Use the Go helpers in
   `internal/lab/perf` (`Database`, `Warm`, `Int`, `Choice`, `Limit`,
-  `Serve`); a Deno adapter follows `cross-store-failure/perf/server.ts`
-  until a shared Deno lifecycle helper exists. Never a second lifecycle.
+  `Serve`). HTTP adapters are Go only. Deno/TypeScript stays in the k6
+  lifecycle and workloads. Never a second lifecycle.
 - Warm every pooled connection before the listener starts (`perf.Warm` runs
   a function on each connection the pool may open): pgx prepares statements
   per connection, and a lazy dial otherwise lands inside a timed request.
@@ -231,10 +235,9 @@ verification to `performance-labs.md`) and close the work log.
 
 Read `knowledge/performance-labs.md` for detail; in brief:
 
-- The Makefile discovers `lessons/*/*/perf/k6.ts` and adds `serve-`, `k6-`,
-  `analyze-k6-`, and `lab-k6-` targets. Keep the base `main.go` or `main.ts`
-  so lesson discovery still works; a Go adapter is `perf/main.go`, a Deno one
-  `perf/server.ts`.
+- The Makefile discovers `lessons/go/*/perf/k6.ts` and adds `serve-`, `k6-`,
+  `analyze-k6-`, and `lab-k6-` targets. Keep the base `main.go`
+  so lesson discovery still works; the adapter is `perf/main.go`.
 - `scripts/perf/run.ts` builds or starts the server, waits for its URL, runs
   k6 with CSV output, saves `settings.json` (from `/health`), `workload.json`
   (from `k6 inspect --include-system-env-vars`), `domain.json` (from

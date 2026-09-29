@@ -1,6 +1,6 @@
 # systems-trinkets
 
-Small systems-engineering lessons in Go or Deno, backed by PostgreSQL, Valkey,
+Small systems-engineering lessons in Go, backed by PostgreSQL, Valkey,
 SeaweedFS (S3), and DuckDB. See `README.md` for the overview.
 
 ## This repo is for learning
@@ -35,6 +35,32 @@ abbreviate credentials, and never replace them with placeholders.
 3. For non-trivial work, use the `trinkets-work-log` skill: keep an event log in
    `.state/` (gitignored) so context can be cleared, then move lasting lessons
    into `knowledge/` and delete the log.
+
+## Local runtime boundary
+
+Every lesson idea and complete project must run locally on macOS using Docker
+Desktop/Compose and Go. Deno/TypeScript is reserved for k6 tooling; lesson cores,
+runners, HTTP adapters and platform components are Go only. Existing DuckDB
+analysis and k6 load tooling stay in scope. Run Linux-specific harnesses inside Docker. Exclude Firecracker and
+all KVM-dependent tools, nested virtualization, separately managed Linux VMs,
+Apple container and alternate VM runtimes from project paths for now.
+Containerd/nerdctl is allowed when useful to a specific lesson, with its Linux
+engine running locally on the Mac; Docker remains the backing-service default.
+Excluded tools may appear in provider research only.
+Use ARM64-compatible images on Apple silicon. Keep unimplemented Docker harnesses
+blocked until configured; portability alone does not make a lesson ready.
+
+## Lesson lifecycle
+
+Potential projects live in `docs/lessons/ideas.md`. `$create-lesson` takes an
+existing idea and writes a complete working guide in `docs/lessons/planned/`,
+using only rows marked `Configured: yes` in `software/software.md`. Leave the
+base source for the learner unless explicitly asked to implement it.
+When the base work is complete, move its guide to `docs/lessons/completed/`
+and update the idea status and links. Follow `docs/lessons/README.md` for
+completion evidence; optional k6 work can come later. Platform research in
+`docs/agentic-platforms/` informs ideas and future software suggestions, but
+does not make unconfigured dependencies ready. See `docs/skills.md`.
 
 ## Before you commit or finish
 

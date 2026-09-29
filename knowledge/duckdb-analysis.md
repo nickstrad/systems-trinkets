@@ -1,7 +1,7 @@
 # DuckDB analysis scripts: idioms
 
 Applies to a lesson's `analyze.sql`, run with `duckdb < analyze.sql` over the
-`measurements.csv` its `main.go` or `main.ts` writes (see `lessons/*/*/analyze.sql`).
+`measurements.csv` its `main.go` writes (see `lessons/go/*/analyze.sql`).
 
 - **Load:** `create table measurements as from 'measurements.csv';` DuckDB
   detects the header and types. The script runs in memory, so `or replace` is
@@ -42,8 +42,6 @@ Verified 2026-09-25: alias reuse ran in `lessons/go/cache-aside/analyze.sql`;
 `.print` labels ran in all three lessons' `analyze.sql`.
 Verified 2026-09-26: the named-group ratio ran in
 `lessons/go/background-job-queue/analyze.sql` via `make analyze-background-job-queue`.
-Verified 2026-09-27: the named-group ratio and `.print` labels ran in the
-first Deno lesson, `lessons/deno/cross-store-failure/analyze.sql`.
 Verified 2026-09-28: in `lessons/go/pipelining-work`, a mistyped group
 literal returned NULL for the aggregate and the ratio with no error.
 

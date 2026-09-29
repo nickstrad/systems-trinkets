@@ -1,0 +1,8 @@
+%% draw-visual: -x 3 -y 1 -p 0
+graph TD
+  T[G1 template catalog] --> P[G2 pool controller]
+  P -->|claim| H[G3 host adapter]
+  H -->|create| V[Two modeled hosts]
+  V --> R[Session and command]
+  H -->|read chunks| C[G4 chunk cache]
+  C -->|missing chunks| S[SeaweedFS chunks]

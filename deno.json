@@ -1,5 +1,4 @@
 {
-  "workspace": ["./lessons/deno"],
   "imports": {
     "k6": "npm:@types/k6@^2",
     "k6/execution": "npm:@types/k6@^2/execution",
@@ -7,5 +6,7 @@
     "k6/metrics": "npm:@types/k6@^2/metrics",
     "k6/options": "npm:@types/k6@^2/options"
   },
-  "exclude": ["**/perf/results/**"]
+  "exclude": [
+    "**/perf/results/**"
+  ]
 }

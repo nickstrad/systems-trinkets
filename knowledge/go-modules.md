@@ -6,8 +6,7 @@ Applies to every Go lesson. The repo is one module
 `measurements.csv` it writes. Run from the root: `make run-<name>`,
 `make analyze-<name>`, or `make lab-<name>` for both. Changed 2026-09-25 from
 one module per lesson; lessons moved from `lessons/<name>/` to
-`lessons/go/<name>/` on 2026-09-27 when the first Deno lesson arrived (see
-`deno-lessons.md`). `go.mod` and `internal/lab` stayed at the repo root on
+`lessons/go/<name>/` on 2026-09-27. `go.mod` and `internal/lab` stayed at the repo root on
 purpose: moving them under `lessons/go/` would change every import path and
 turn `go vet ./...` into a `cd` first, for no behavioral gain.
 
@@ -29,8 +28,8 @@ turn `go vet ./...` into a `cd` first, for no behavioral gain.
 - **Lessons run from their own directory.** The Makefile does
   `cd lessons/go/<name>` before `go run .`, because the CSV and `analyze.sql`
   use relative paths. Root commands like `go vet ./...` and `go build ./...`
-  still cover every lesson; `make check` runs `go vet ./...` plus the Deno
-  check.
+  still cover every lesson; `make check` runs `go vet ./...` plus Deno
+  type-checking of k6 tooling.
 - **One version per dependency.** All lessons share the root `go.sum`; pgx,
   go-redis, and modernc sqlite each have one pinned version.
 - **Every dependency marked `// indirect` means tidy ran too early.** If
@@ -40,8 +39,7 @@ turn `go vet ./...` into a `cd` first, for no behavioral gain.
   anything: it exits non-zero when stale, zero when clean.
 - **Adding a lesson:** create `lessons/go/<name>/main.go` and `analyze.sql`;
   the Makefile discovers `lessons/go/*/main.go` with `$(wildcard)`, so no
-  Makefile edit is needed. The directory picks the runtime: a lesson under
-  `lessons/deno/` runs with `deno run -A main.ts` instead.
+  Makefile edit is needed. All lesson code and HTTP adapters use Go.
 
 Verified 2026-09-25 on Go 1.26.4: `go vet ./...`, `go mod tidy -diff` (exit 0),
 and `make lab-<name>` for all three lessons after the migration.

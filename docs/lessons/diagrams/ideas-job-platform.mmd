@@ -1,0 +1,8 @@
+%% draw-visual: -x 3 -y 1 -p 0
+graph TD
+  A[G1 job API] --> Q[Tenant job queues]
+  Q --> S[G2 scheduler]
+  S -->|reserve| C[Capacity and leases]
+  S -->|dispatch| W[G3 worker adapter]
+  W --> R[Restricted Worker]
+  R --> P[G4 result writer]
