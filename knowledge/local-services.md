@@ -16,6 +16,10 @@ Applies when running or adding a service under `software/` (see `software/softwa
   service only needs a `compose_file_<name>` line and the name in `SERVICES`.
   The per-lesson `run-`/`analyze-`/`lab-` rules use the same trick over
   `$(wildcard lessons/go/*/main.go)`, running `go run .` in the lesson directory.
+- **Redis beside Valkey.** `redis.compose.yaml` publishes host port 6380 (not
+  6379) so both run at once; `REDIS_PORT` overrides it. The `redis:8` image
+  already bundles JSON, search, vector sets, time series and Bloom, so no
+  module flags are needed. See [redis-vs-valkey.md](redis-vs-valkey.md).
 - **Docker daemon down.** `docker manifest inspect` can succeed while the daemon
   is stopped; `docker info` is the real check. Start Docker Desktop with
   `open -a Docker`.

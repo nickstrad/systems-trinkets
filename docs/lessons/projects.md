@@ -6,6 +6,13 @@ mechanisms, then to follow-up lessons, then to the explicit chunks of
 integration work that no lesson covers. Nothing here is implemented or
 planned; a completed lesson proves its small mechanism, not the integration.
 
+Where a Redis-protocol store appears, a lesson picks Valkey or Redis by which
+feature set suits it (Redis for JSON, search, vector sets, time series, Bloom
+filters or `DELEX`; Valkey for `DELIFEQ` or cluster-mode multi-DB) and
+defaults to Redis when it does not matter; lessons already planned or
+completed on Valkey stay there. See the
+[software catalog](../../software/software.md).
+
 Read a project like this:
 
 - **Architecture** is a proposed diagram plus one paragraph on the decision

@@ -20,6 +20,13 @@ names the catalog row that still needs setup or the row to add. Follow
 [AGENTS.md](AGENTS.md) when editing and the [lifecycle](README.md) when
 promoting an idea to a plan.
 
+Redis-protocol store policy: an idea names Valkey or Redis by which feature set
+suits it (Redis for JSON, search, vector sets, time series, Bloom filters or
+`DELEX`; Valkey for `DELIFEQ`, cluster-mode multi-DB or an explicit
+comparison) and defaults to Redis when it does not matter; ideas already
+planned or completed on Valkey stay there. See the
+[software catalog](../../software/software.md).
+
 Runtime boundary in one line: Docker Desktop/Compose plus Go on macOS, Linux
 probes inside containers, no KVM or VM runtimes; details in README.md.
 
@@ -145,7 +152,7 @@ Research: [Daytona](../agentic-platforms/daytona.md),
 - Measure: stale updates rejected; resume transition ms.
 - Software: Go; PostgreSQL. Ready; simulated sessions.
 - Options: PostgreSQL row with generation column and conditional update (no
-  setup) · Valkey Lua compare-and-set (no setup) · etcd transaction comparing
+  setup) · Redis Lua compare-and-set (no setup) · etcd transaction comparing
   mod revision (no setup).
 - Builds on: the compare-and-swap core from `stale-owner-fencing`.
 
@@ -159,7 +166,7 @@ Research: [Daytona](../agentic-platforms/daytona.md),
   allocations are eventually cleaned.
 - Measure: resurrections; cleanup ms; tombstones retained.
 - Software: Go; PostgreSQL. Ready; simulated runner.
-- Options: PostgreSQL tombstone rows with cleanup job (no setup) · Valkey
+- Options: PostgreSQL tombstone rows with cleanup job (no setup) · Redis
   tombstone key with TTL and keyspace-notification cleanup (no setup).
 - Builds on: `session-generation`.
 
@@ -181,15 +188,15 @@ Research: [Daytona](../agentic-platforms/daytona.md),
 **Does an idle timeout fire once per sandbox when workers restart?**
 (Added 2026-09-29 from the configured catalog.)
 
-- Compare: a poller scanning last-activity timestamps versus a Valkey key
+- Compare: a poller scanning last-activity timestamps versus a Redis key
   with TTL whose expiry event (`__keyevent@0__:expired`) triggers the stop;
   restart the reaper mid-run and let activity extend the TTL.
 - Invariant: every idle sandbox is stopped exactly once after its timeout;
   activity within the window prevents the stop; a missed event is caught by
   reconciliation.
 - Measure: stop lateness ms; duplicate stops; missed expiries after restart.
-- Software: Go; Valkey keyspace notifications and PostgreSQL. Ready.
-- Options: Valkey TTL key plus `__keyevent@0__:expired` subscriber with
+- Software: Go; Redis keyspace notifications and PostgreSQL. Ready.
+- Options: Redis TTL key plus `__keyevent@0__:expired` subscriber with
   PostgreSQL as truth (no setup) · PostgreSQL due-time poller as the baseline
   (no setup) · Temporal timer per sandbox as a third variant (no setup).
 - Builds on: `lease-reclaim` (TTL as liveness) and `lifecycle-reconcile`.
@@ -237,9 +244,9 @@ Research: [Daytona](../agentic-platforms/daytona.md),
 **Does a partitioned owner behave like a crashed one?**
 (Added 2026-09-29 from the configured catalog.)
 
-- Compare: the owner talks to Valkey directly versus through a Toxiproxy
-  proxy that is cut, delayed, or reset mid-lease; observe both the owner's
-  view and the contender's.
+- Compare: the owner talks to Valkey (as in `lease-reclaim`) directly versus
+  through a Toxiproxy proxy that is cut, delayed, or reset mid-lease; observe
+  both the owner's view and the contender's.
 - Invariant: during a partition the owner's renewals fail visibly and the
   contender acquires only after expiry; when the partition heals the old
   owner does not regain ownership without reacquiring.
@@ -269,7 +276,7 @@ Research: [E2B](../agentic-platforms/e2b.md),
 - Measure: oversubscriptions; rejections; admission ms.
 - Software: Go; PostgreSQL. Ready; modeled hosts.
 - Options: PostgreSQL single transaction with row lock (no setup) · etcd
-  transaction (no setup) · Valkey Lua decrement-if-available (no setup) · add
+  transaction (no setup) · Redis Lua decrement-if-available (no setup) · add
   PgBouncer in front for many admitters (no setup).
 
 ### warm-pool-claims
@@ -282,7 +289,7 @@ Research: [E2B](../agentic-platforms/e2b.md),
   its cap.
 - Measure: ready latency ms; pool misses; idle slot-ms.
 - Software: Go; PostgreSQL. Ready; modeled provisioning.
-- Options: PostgreSQL `for update skip locked` claim (no setup) · Valkey list
+- Options: PostgreSQL `for update skip locked` claim (no setup) · Redis list
   pop as the pool (no setup) · NATS JetStream work-queue stream (no setup).
 - Builds on: `atomic-capacity-reservation`.
 
@@ -478,7 +485,7 @@ Research: [Daytona](../agentic-platforms/daytona.md),
   retained history.
 - Measure: duplicate starts; outcome lookup ms; ambiguous results.
 - Software: Go; PostgreSQL. Ready; no real container daemon.
-- Options: PostgreSQL execution table (no setup) · Valkey `SET NX` execution
+- Options: PostgreSQL execution table (no setup) · Redis `SET NX` execution
   ID with TTL (no setup) · NATS JetStream `Nats-Msg-Id` dedup window (no
   setup).
 - Builds on: `completed-job-counter` (idempotency key) and
@@ -495,7 +502,7 @@ Research: [Daytona](../agentic-platforms/daytona.md),
 - Measure: peak buffered bytes; drops; producer blocked ms.
 - Software: Go goroutines/channels. Ready; message-stream model, not
   process isolation or PTY/WebSocket.
-- Options: Go channels only (no setup) · Valkey Streams with `MAXLEN` as the
+- Options: Go channels only (no setup) · Redis Streams with `MAXLEN` as the
   bounded buffer (no setup) · NATS JetStream stream limits with discard
   policy (no setup).
 
@@ -549,8 +556,8 @@ Research: [Daytona](../agentic-platforms/daytona.md),
 - Measure: invalid accepts; replay rejects; approval-to-dispatch ms.
 - Software: Go; PostgreSQL. Ready; fixture approval issuer, no UI or live
   connector.
-- Options: PostgreSQL grant row with atomic claim (no setup) · Valkey Lua
-  one-use claim (no setup) · Temporal signal delivering the grant to a
+- Options: PostgreSQL grant row with atomic claim (no setup) · Redis Lua
+  one-use claim or `DELEX <key> IFEQ <token>` (no setup) · Temporal signal delivering the grant to a
   workflow-side claim (no setup).
 
 ### surrogate-credential-broker
@@ -611,10 +618,10 @@ Research: [Daytona](../agentic-platforms/daytona.md),
 - Invariant: a route cannot deliver to a different tenant or an obsolete
   generation.
 - Measure: misroutes; stale rejections; route lookup ms.
-- Software: Go; PostgreSQL and Valkey. Ready; route resolution model, no
+- Software: Go; PostgreSQL and Redis. Ready; route resolution model, no
   proxy.
-- Options: PostgreSQL routes cached in Valkey (no setup) · etcd watch pushing
-  invalidations (no setup) · Valkey keyspace notifications on route expiry
+- Options: PostgreSQL routes cached in Redis, optionally as JSON documents (no setup) · etcd watch pushing
+  invalidations (no setup) · Redis keyspace notifications on route expiry
   (no setup) · a real proxy would use `httputil.ReverseProxy` (catalog row
   `no`, standard library; mark `yes` when used).
 - Builds on: `session-generation`.
@@ -653,7 +660,7 @@ Research: [Inngest](../agentic-platforms/inngest.md),
 - Measure: missing effects; duplicate attempts; delivery lag ms.
 - Software: Go; PostgreSQL and NATS JetStream. Ready.
 - Options: PostgreSQL outbox plus NATS JetStream consumer (no setup) ·
-  PostgreSQL plus Valkey Streams consumer group (no setup) · PostgreSQL
+  PostgreSQL plus Redis Streams consumer group (no setup) · PostgreSQL
   logical replication reading the outbox table (no setup; see `wal-change-
   feed`).
 - Builds on: `completed-job-counter`; extends its idempotent apply to a
@@ -669,7 +676,7 @@ Research: [Inngest](../agentic-platforms/inngest.md),
   under bounded input.
 - Measure: per-tenant wait p95 ms; starvation intervals; throughput jobs/s.
 - Software: Go; PostgreSQL. Ready; controlled arrivals.
-- Options: PostgreSQL per-tenant queues (no setup) · Valkey Streams per
+- Options: PostgreSQL per-tenant queues (no setup) · Redis Streams per
   tenant (no setup) · NATS JetStream per-tenant subjects with max ack pending
   (no setup).
 - Builds on: `background-job-queue`.
@@ -683,8 +690,8 @@ Research: [Inngest](../agentic-platforms/inngest.md),
 - Invariant: accepted jobs complete after drain; the queue never exceeds its
   configured bound in the variant.
 - Measure: queue depth; rejected jobs; wait ms.
-- Software: Go; Valkey Streams. Ready; bounded overload experiment.
-- Options: Valkey Streams `MAXLEN` (no setup) · NATS JetStream max messages
+- Software: Go; Redis Streams. Ready; bounded overload experiment.
+- Options: Redis Streams `MAXLEN` (no setup) · NATS JetStream max messages
   with discard-new (no setup) · PostgreSQL count check in the admitting
   transaction (no setup).
 - Builds on: `background-job-queue`.
@@ -695,14 +702,14 @@ Research: [Inngest](../agentic-platforms/inngest.md),
 (Added 2026-09-29 from the configured catalog.)
 
 - Compare: the outbox consumer from `outbox-redelivery` versus a logical
-  replication slot (`wal_level=logical`) feeding the same Valkey cache; kill
+  replication slot (`wal_level=logical`) feeding the same Redis cache; kill
   the consumer mid-stream and restart.
 - Invariant: after restart the cache reflects every committed row exactly
   once; no change is skipped or applied out of commit order.
 - Measure: apply lag ms; replayed changes after restart; slot retained bytes.
-- Software: Go; PostgreSQL logical replication and Valkey. Ready.
+- Software: Go; PostgreSQL logical replication and Redis. Ready.
 - Options: PostgreSQL logical replication (`pgoutput`) decoded in Go, applied
-  to Valkey (no service setup; add a replication client library such as
+  to Redis (no service setup; add a replication client library such as
   `pglogrepl` to the module and note it in the catalog row) · compare against
   the JetStream outbox consumer (no setup).
 - Builds on: `outbox-redelivery` and `cache-aside`.
@@ -773,7 +780,7 @@ Research: [Vercel Workflow](../agentic-platforms/vercel-workflow.md),
   wakeups.
 - Measure: missed actions; wakeup lateness ms; idle workers.
 - Software: Go; PostgreSQL. Ready.
-- Options: PostgreSQL due-time rows (no setup) · Valkey TTL keys with
+- Options: PostgreSQL due-time rows (no setup) · Redis TTL keys with
   keyspace notifications as wakeups (no setup) · Temporal timers as the
   engine-owned variant (no setup).
 

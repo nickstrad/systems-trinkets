@@ -52,12 +52,15 @@ stopped).
 | DuckDB | Analysis | Reads `measurements.csv` in every `analyze.sql` | yes | brew CLI |
 | PostgreSQL 18 | Storage | Control-plane state: sandboxes, owners, leases, jobs, usage ledger | yes | `postgres.compose.yaml`; `postgres://trinkets:trinkets@localhost:5432/trinkets` |
 | Valkey 9 | Storage | Cache, queues, pub/sub, leases, rate limits, idle timers | yes | `valkey.compose.yaml`; `redis://localhost:6379` (no auth) |
+| Redis 8 | Storage | Same jobs as Valkey, plus JSON documents, secondary indexes and search, vector sets, time series, Bloom filters; the default when the choice does not matter (see Choosing Redis or Valkey) | yes | `redis.compose.yaml`; `redis://localhost:6380` (no auth); the `redis:8` image bundles the modules below |
+| Redis modules (JSON, Query Engine, vector sets, time series, Bloom) | Storage | Agent memory and retrieval, indexed queries over sandbox metadata, per-sandbox usage series, cheap membership tests | yes | built into the running Redis; `MODULE LIST` shows `ReJSON`, `search`, `vectorset`, `timeseries`, `bf`; Valkey 9 has none of them |
 | SeaweedFS | Storage | S3 objects: artifacts, snapshots, uploads | yes | `seaweedfs/compose.yaml`; `http://localhost:8333`, access key `trinkets`, secret key `trinkets-secret`, region `us-east-1`, path-style |
 | Go S3 client | Storage | Signed S3 operations for Go artifact/chunk lessons | no | Configure a Go S3 SDK and path-style SeaweedFS client in the root module; service availability does not supply a client helper |
 | PostgreSQL `LISTEN`/`NOTIFY` | Storage | Wake workers without polling | yes | built into the running PostgreSQL |
 | PostgreSQL logical replication | Storage | Stream state changes to a cache or index | yes | `wal_level=logical` is set in `postgres.compose.yaml`; create a publication and replication slot from the lesson |
 | Valkey Streams | Storage | Consumer groups, pending entries, claim-on-crash; compare with JetStream | yes | built into the running Valkey |
 | Valkey keyspace notifications | Storage | Key expiry as a reaper trigger | yes | `--notify-keyspace-events Ex` is set in `valkey.compose.yaml`; subscribe to `__keyevent@0__:expired` |
+| Redis Streams and keyspace notifications | Storage | Same as the Valkey rows above, on Redis | yes | built into the running Redis; `--notify-keyspace-events Ex` is set in `redis.compose.yaml`; subscribe to `__keyevent@0__:expired` |
 | pgvector | Storage | Agent memory and retrieval | no | swap the image to `pgvector/pgvector:pg18` in `postgres.compose.yaml` |
 | PgBouncer | Storage | Thousands of runners against one PostgreSQL; transaction versus session pooling | yes | `pgbouncer.compose.yaml`, start postgres first; `postgres://trinkets:trinkets@localhost:6432/trinkets`, admin console `postgres://trinkets:trinkets@localhost:6432/pgbouncer`; knobs `PGBOUNCER_POOL_MODE` (transaction) and `PGBOUNCER_POOL_SIZE` (5) |
 | ClickHouse | Storage | Usage and event analytics at scale | no | compose; reference, DuckDB covers the lesson value |
@@ -143,7 +146,7 @@ stopped).
 
 Commands run from the repo root: `make up-<service>`, `make down-<service>`,
 `make clean-<service>`, `make logs-<service>`, `make ps`. The names are
-`postgres`, `valkey`, `seaweedfs`, `nats`, `etcd`, `registry`, `toxiproxy`,
+`postgres`, `valkey`, `redis`, `seaweedfs`, `nats`, `etcd`, `registry`, `toxiproxy`,
 `temporal`, `openbao`, and `pgbouncer`. Each is its own Compose project with its
 own network; a service that reaches another one (PgBouncer to PostgreSQL, a
 Toxiproxy upstream) goes through the host as `host.docker.internal:<port>`.
@@ -157,6 +160,7 @@ port, override it with an environment variable when starting the service:
 |---|---|
 | `POSTGRES_PORT` | 5432 |
 | `VALKEY_PORT` | 6379 |
+| `REDIS_PORT` | 6380 (Valkey holds 6379) |
 | `SEAWEEDFS_S3_PORT` | 8333 |
 | `SEAWEEDFS_MASTER_PORT` | 9333 |
 | `SEAWEEDFS_FILER_PORT` | 8888 |
@@ -183,6 +187,43 @@ volume.
 Single `valkey/valkey:9` container with append-only persistence, so keys survive
 `down`/`up` until `clean`, and `notify-keyspace-events Ex` so expiries publish to
 `__keyevent@0__:expired`. No password. Data lives in `trinkets-valkey_valkey-data`.
+
+### redis.compose.yaml
+
+Single `redis:8` container (Redis Open Source, multi-arch, arm64 included) with
+append-only persistence and `notify-keyspace-events Ex`, like the Valkey one. No
+password. Data lives in `trinkets-redis_redis-data`. The host port is 6380 so it
+runs beside Valkey on 6379. The image bundles the JSON, Query Engine (`search`),
+vector set, time series and Bloom modules, already loaded.
+
+### Choosing Redis or Valkey
+
+Both speak RESP and go-redis v9 talks to both; the Go helpers are
+`internal/lab/valkey` (`CACHE_URL`, port 6379) and `internal/lab/redis`
+(`REDIS_URL`, port 6380). Pick per lesson by feature set. When one fits the
+lesson better, use it and say why in the lesson or idea. When it does not
+matter, default to Redis. Completed and planned Valkey lessons stay on Valkey.
+
+Rule of thumb: choose Redis when the lesson needs JSON, search or secondary
+indexes, vector sets, time series, probabilistic structures (Bloom, Cuckoo,
+count-min sketch, Top-K), or `DELEX`. Choose Valkey when the lesson is about
+Valkey-specific behavior (`DELIFEQ`, numbered databases in cluster mode) or the
+open-source-fork story. Otherwise Redis.
+
+Verified 2026-09-29 against Redis 8.10.2 (`redis:8`) and Valkey 9.1.2
+(`valkey/valkey:9`):
+
+| Behavior | Redis 8 | Valkey 9 |
+|---|---|---|
+| `JSON.SET`, `VADD` (vector sets), search, time series, Bloom | work; `MODULE LIST` shows the five modules | unknown commands; only the `lua` module is listed |
+| `SET key val IFEQ old`, `HSETEX ... EX` | supported | supported |
+| Compare-and-delete | `DELEX key IFEQ val`; rejects `DELIFEQ` | `DELIFEQ key val`; rejects `DELEX` |
+| `CONFIG GET notify-keyspace-events` with `Ex` set | `xE` | `xE` |
+| `COMMAND COUNT` | 447 | 257 |
+
+Not verified here: Valkey is BSD-3 licensed under the Linux Foundation, Redis 8
+is tri-licensed RSALv2, SSPLv1 and AGPLv3, and Valkey 9 supports numbered
+databases in cluster mode and atomic slot migration.
 
 ### seaweedfs/
 

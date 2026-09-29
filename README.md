@@ -89,14 +89,15 @@ Start only what a lesson needs; the table in the next section says which.
 | `make logs-<service>` | `docker compose ... logs -f` | Follow the service log while a lesson runs. Ctrl-C stops following; the service keeps running. |
 | `make ps` | `docker ps` filtered to `trinkets-*` | See which services are up, healthy, and on which ports. |
 
-The core services are `postgres`, `valkey`, and `seaweedfs`; `make help` lists
+The core services are `postgres`, `valkey`, `redis`, and `seaweedfs`; `make help` lists
 the rest (`nats`, `etcd`, `registry`, `toxiproxy`, `temporal`, `openbao`,
 `pgbouncer`), each with its own compose file. Several can be started
 in one command: `make up-postgres up-valkey`. Connection details and dev
 credentials are in [`software/software.md`](software/software.md); lessons use them
 by default (`postgres://trinkets:trinkets@localhost:5432/trinkets`,
-`redis://localhost:6379`, S3 at `http://localhost:8333` with access key
-`trinkets` and secret key `trinkets-secret`).
+`redis://localhost:6379` for Valkey and `redis://localhost:6380` for Redis, both
+without auth, S3 at `http://localhost:8333` with access key `trinkets` and
+secret key `trinkets-secret`).
 
 If `up-` fails with a port conflict, something else is already listening on
 that port; see [knowledge/local-services.md](knowledge/local-services.md).
@@ -210,7 +211,7 @@ Deno type-checks the k6 workloads against `@types/k6` through the root
 Lessons live under `lessons/go/<name>/`. Each has `main.go`, a reusable
 `core/` package, `measurements.csv`, and `analyze.sql`. One root `go.mod`
 serves all lessons. Shared helpers live in `internal/lab`, with PostgreSQL
-and Valkey clients in their own subpackages. The Go S3 client is not configured.
+and Valkey/Redis clients in their own subpackages. The Go S3 client is not configured.
 
 TypeScript is limited to `scripts/perf/` and each lesson's `perf/k6.ts`.
 The root `deno.json` supplies k6 types; it has no lesson workspace members.
@@ -226,10 +227,11 @@ Lessons build on a shared set of local services:
 
 - **PostgreSQL** — relational storage
 - **Valkey** (Redis-compatible) — caching, queues, pub/sub
+- **Redis** — the same workloads plus Redis-only features (JSON, search, vector sets, time series, Bloom filters). A lesson picks Valkey or Redis by which feature set suits it; when it does not matter, use Redis.
 - **SeaweedFS** — S3-compatible object storage
 - **DuckDB** — analysis of run data (results, timings, traces) produced by lessons
 
-PostgreSQL, Valkey, and SeaweedFS run in Docker, defined in [`software/`](software/software.md),
+PostgreSQL, Valkey, Redis, and SeaweedFS run in Docker, defined in [`software/`](software/software.md),
 alongside optional services (NATS JetStream, etcd, an OCI registry, Toxiproxy,
 Temporal, OpenBao, PgBouncer) that later lessons build on. The catalog in
 [`software/software.md`](software/software.md) lists every piece of software

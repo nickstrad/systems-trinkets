@@ -1,7 +1,7 @@
 # systems-trinkets
 
 Small systems-engineering lessons in Go, backed by PostgreSQL, Valkey,
-SeaweedFS (S3), and DuckDB. See `README.md` for the overview.
+Redis, SeaweedFS (S3), and DuckDB. See `README.md` for the overview.
 
 ## This repo is for learning
 
@@ -32,6 +32,9 @@ abbreviate credentials, and never replace them with placeholders.
    `make up-<service>` / `down-` / `clean-` from the repo root. Lessons run
    with `make run-<lesson>` / `analyze-` / `lab-`; the repo is one Go module
    with shared helpers in `internal/lab` (see `knowledge/go-modules.md`).
+   For a Redis-protocol store, choose Valkey or Redis by which feature set suits
+   the lesson and default to Redis when it does not matter (see
+   `software/software.md`); existing Valkey lessons stay on Valkey.
 3. For non-trivial work, use the `trinkets-work-log` skill: keep an event log in
    `.state/` (gitignored) so context can be cleared, then move lasting lessons
    into `knowledge/` and delete the log.

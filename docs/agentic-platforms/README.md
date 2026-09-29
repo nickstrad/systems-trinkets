@@ -46,7 +46,7 @@ claims that all providers implement the same mechanism.
 ## Software boundary
 
 [software/software.md](../../software/software.md) is authoritative. PostgreSQL,
-Valkey, SeaweedFS, NATS, etcd, Temporal, and other rows marked yes can support
+Valkey, Redis, SeaweedFS, NATS, etcd, Temporal, and other rows marked yes can support
 small local experiments today. Modeling allocation with rows is not running a
 VM; fetching chunks is not implementing userfaultfd; object storage is not a
 POSIX mount; a local run is not a production scaling benchmark.

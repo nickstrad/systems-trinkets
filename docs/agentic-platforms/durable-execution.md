@@ -26,7 +26,7 @@ Temporal is **configured** in [`software/software.md`](../../software/software.m
 
 The runnable lesson should compare only PostgreSQL checkpoints with the configured Temporal dev server and Go SDK. Keep the job concrete: reserve a resource, wait on a short timer, then publish a result. Store business state in PostgreSQL; Temporal's local dev server keeps its own workflow history in its SQLite volume. Invariant: business state advances monotonically, and retries cannot duplicate a reservation or publication. Inject a worker restart after an Activity's external write but before completion is acknowledged. Measure attempts, duplicate effects, recovery time, history growth, and queue wait. Keep the timer short and report that the local dev server is not a production cluster.
 
-NATS JetStream or Valkey Streams can be a separate follow-up alternative for comparing queue redelivery and explicit checkpoints; both are configured, but they are outside the core Temporal-versus-PostgreSQL experiment. Restate remains a source-grounded comparison only until configured.
+NATS JetStream or Redis Streams can be a separate follow-up alternative for comparing queue redelivery and explicit checkpoints; both are configured, but they are outside the core Temporal-versus-PostgreSQL experiment. Restate remains a source-grounded comparison only until configured.
 
 ## Evidence versus inference
 

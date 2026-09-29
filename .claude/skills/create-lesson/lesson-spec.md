@@ -36,8 +36,16 @@ selection, choose another eligible existing idea. Do not substitute silently.
 Use Go only for lesson cores, runners and HTTP adapters. Deno/TypeScript is
 reserved for k6 tooling. Follow the repository local Mac/container boundary. Choose one or at most two primary services
 from the configured rows. Choose storage to fit the problem: PostgreSQL when a
-relational database is needed; Valkey-only, object-storage-only, or
-queue-only systems are welcome. Never use SQLite in a new lesson, even though
+relational database is needed; Valkey- or Redis-only, object-storage-only, or
+queue-only systems are welcome. When a lesson needs a Redis-protocol store,
+pick Valkey or Redis by which feature set suits it: Redis for JSON, search,
+vector sets, time series, probabilistic structures (Bloom, Cuckoo, CMS,
+Top-K) or `DELEX`; Valkey for Valkey-specific behavior (`DELIFEQ`,
+cluster-mode multi-DB) or an explicit Valkey-versus-Redis comparison. Default
+to Redis when it does not matter, and name the choice and the reason in the
+guide. Existing Valkey lessons stay on Valkey.
+
+Never use SQLite in a new lesson, even though
 the repository contains an older SQLite lesson. Always use DuckDB to analyze
 measurements; analysis-only DuckDB does not count toward the primary limit.
 
@@ -97,6 +105,12 @@ Go, under `github.com/nickstrad/systems-trinkets/internal/lab`:
     postgres.Connect(ctx) *pgx.Conn         // pgx/v5
     valkey.URL() string
     valkey.Connect(ctx) *redis.Client       // go-redis/v9, pings
+    redis.URL() string                      // env REDIS_URL, default redis://localhost:6380
+    redis.Connect(ctx) *goredis.Client      // go-redis/v9, pings
+
+The `internal/lab/redis` package is named `redis`, so import go-redis as
+`goredis` when both appear in one file. Confirm both helpers exist in
+`internal/lab/` before relying on them.
 
 There is no configured Go S3 client/helper yet. Keep S3 ideas blocked on that
 catalog entry until it is configured; do not silently substitute another

@@ -76,6 +76,9 @@ unconfigured software, leave it in ideas and record the missing catalog rows
 blocker without substituting a different topic. For a bare invocation, select
 another eligible idea; if none exists, report that no idea is ready. Never ask
 the learner to install software or add Docker configuration as part of a lesson.
+When the lesson needs a Redis-protocol store, apply the Valkey-or-Redis
+selection rule in `lesson-spec.md`: choose by feature fit, default to Redis,
+and state the choice and the reason in the guide.
 
 Select the requested idea by its stable slug or title. Without a selection,
 choose an unplanned idea whose entire required stack is configured,

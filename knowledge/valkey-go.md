@@ -3,7 +3,9 @@
 Applies when a lesson talks to the local Valkey with
 `github.com/redis/go-redis/v9` (see `lessons/go/cache-aside/main.go`). The
 documented connection string is `redis://localhost:6379` (no auth), from
-`software/software.md`.
+`software/software.md`. For the Redis twin (`internal/lab/redis`, `REDIS_URL`,
+port 6380) and when to pick which server, see [redis-vs-valkey.md](redis-vs-valkey.md);
+the same go-redis gotchas below apply to both.
 
 - **Connect from the documented URL, not a bare address.**
   `redis.Options{Addr: ...}` wants `host:port`; passing `redis://localhost:6379`

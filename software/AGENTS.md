@@ -33,6 +33,9 @@ blocked until configured; portability alone does not make a lesson ready.
 - The `Setup` column in `software.md` gives the full connection string for each
   configured service, username and password included (or says there is no
   auth). Always quote it that way; never redact it.
+- Redis and Valkey both run (ports 6380 and 6379). Pick per lesson by feature
+  set, and default to Redis when it does not matter; see "Choosing Redis or
+  Valkey" in `software.md`.
 - Every service has a healthcheck so `make up-<service>` returns only when it is ready.
 - Adding a service: add its compose file, add a `compose_file_<service>` line and
   its name to `SERVICES` in the root `Makefile`, flip its row in `software.md`

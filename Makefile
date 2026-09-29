@@ -14,12 +14,13 @@
 #   make ps               show running trinkets services
 #   make check            compile-check every lesson: go vet ./... and deno check
 #
-# Services: postgres, valkey, seaweedfs, nats, etcd, registry, toxiproxy, temporal, openbao, pgbouncer (see software/software.md)
+# Services: postgres, redis, valkey, seaweedfs, nats, etcd, registry, toxiproxy, temporal, openbao, pgbouncer (see software/software.md)
 
-SERVICES     := postgres valkey seaweedfs nats etcd registry toxiproxy temporal openbao pgbouncer
+SERVICES     := postgres redis valkey seaweedfs nats etcd registry toxiproxy temporal openbao pgbouncer
 LESSONS      := $(patsubst lessons/go/%/main.go,%,$(wildcard lessons/go/*/main.go))
 
 compose_file_postgres  := software/postgres.compose.yaml
+compose_file_redis     := software/redis.compose.yaml
 compose_file_valkey    := software/valkey.compose.yaml
 compose_file_seaweedfs := software/seaweedfs/compose.yaml
 compose_file_nats      := software/nats.compose.yaml

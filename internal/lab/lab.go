@@ -2,7 +2,7 @@
 // defaults, fail-fast error checking, and the measurements.csv writer. It
 // depends only on the standard library so a lesson never compiles a driver it
 // does not use. Driver-specific helpers, including each service's URL, live
-// in the subpackages lab/postgres and lab/valkey.
+// in the subpackages lab/postgres, lab/valkey and lab/redis.
 package lab
 
 import (

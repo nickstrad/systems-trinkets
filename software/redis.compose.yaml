@@ -1,0 +1,22 @@
+# Redis Open Source 8 for lessons. Start with `make up-redis` from the repo root.
+# Connect: redis://localhost:6380 (host port 6380 so it can run beside Valkey on 6379)
+name: trinkets-redis
+
+services:
+  redis:
+    image: redis:8
+    # Append-only file so data survives restarts until `make clean-redis`.
+    # notify-keyspace-events Ex publishes key expiry events (__keyevent@0__:expired) for lessons.
+    command: ["redis-server", "--appendonly", "yes", "--notify-keyspace-events", "Ex"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  redis-data:
