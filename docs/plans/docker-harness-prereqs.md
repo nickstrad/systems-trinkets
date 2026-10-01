@@ -164,7 +164,10 @@ Restricted means: `User: "10001:10001"`, `NetworkMode: "none"`,
 Peer identity across containers on one named volume:
 
 - An init container as root with only `CHOWN` and `FOWNER` added back set the
-  socket directory to `20000:30000` mode `2750`.
+  socket directory to `20000:30000`. (Corrected in H5: as `0:0` the mode came
+  out `0750`, because chmod clears the setgid bit for a caller outside the
+  file's group without `CAP_FSETID`; running the init container as
+  `0:30000` gives `2750`.)
 - Broker `20000:30000` listened with umask `007`; the socket was `srwxrwx---`.
 - Workers `20001:20001` and `20002:20002` with supplementary group `30000`
   connected. `SO_PEERCRED` gave the broker each worker's UID and **primary**
@@ -177,6 +180,9 @@ Peer identity across containers on one named volume:
 Not spiked, to be proven inside the work items: read-only bind or volume
 mounts (`ReadOnly: true`), OOM kill reporting, a worker trying to unlink or
 replace the socket, user-defined networks and every egress bypass probe.
+(H5 settled the socket ones: a worker on a read-only mount still connects,
+and cannot unlink, replace, chown or chmod the socket on a read-only or a
+read-write mount.)
 (Whether cancelling an exec's context stops the process was settled in H3:
 it does not.)
 
@@ -499,7 +505,10 @@ Depends on H3.
   named volume and run a one-shot init container (root, `CapDrop: ALL`,
   `CapAdd: CHOWN, FOWNER`, no network, read-only root) that sets the mount
   directory to `brokerUID:socketGID` mode `2750`. Return a `Mount` for the
-  broker (read-write) and one for workers.
+  broker (read-write) and one for workers. (As built: the init container
+  runs as `0:socketGID` so chmod keeps the setgid bit, the worker mount is
+  read-only, and identities above `2147483647` are refused because the
+  engine fails them at start.)
 - Broker spec: `Restricted` with `User: "<brokerUID>:<socketGID>"`. Worker
   spec: `Restricted` with its own `uid:gid` and `Groups: [socketGID]`. With
   all capabilities dropped and no-new-privileges set, a worker has no

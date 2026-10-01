@@ -107,7 +107,7 @@ func TestMutatingCommandsRefuseWithoutMarker(t *testing.T) {
 	owner := fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid())
 	for _, args := range [][]string{
 		{"write", dir}, {"chmod", file, "0644"}, {"chown", file, owner},
-		{"unlink", file}, {"initdir", dir, owner, "0755"}, {"alloc", "1"},
+		{"unlink", file}, {"replace", file}, {"initdir", dir, owner, "0755"}, {"alloc", "1"},
 	} {
 		var out, errOut bytes.Buffer
 		if code := run(args, &out, &errOut); code != 3 {
@@ -127,7 +127,7 @@ func TestMutatingCommandsRefuseWithoutMarker(t *testing.T) {
 
 func TestWhichCommandsAreGuarded(t *testing.T) {
 	want := map[string]bool{
-		"write": true, "setuid": true, "chown": true, "chmod": true, "unlink": true, "mount": true,
+		"write": true, "setuid": true, "chown": true, "chmod": true, "unlink": true, "replace": true, "mount": true,
 		"unshare-user": true, "keyctl": true, "battery": true, "alloc": true, "fork": true, "initdir": true,
 	}
 	for _, c := range commands {

@@ -78,7 +78,8 @@ func peerCred(c *net.UnixConn) (*syscall.Ucred, error) {
 
 // cmdPeerEcho listens on a unix socket and answers every connection with the
 // credentials the kernel reports for it, both to the peer and as a "peer"
-// line on its own output. The umask applies to the socket file, so the
+// line on its own output, once it has read the client's request line. The
+// umask applies to the socket file, so the
 // default 007 gives srwxrwx--- (the group may connect, others may not).
 func cmdPeerEcho(args []string, r *reporter) error {
 	fs := newFlagSet("peer-echo")
@@ -117,11 +118,35 @@ func cmdPeerEcho(args []string, r *reporter) error {
 		} else {
 			detail := fmt.Sprintf("uid=%d gid=%d pid=%d", cred.Uid, cred.Gid, cred.Pid)
 			r.ok("peer", "%s", detail)
+			// Read the request line (or EOF) before answering. Answering and
+			// closing first raced a client that writes then reads: its write
+			// hit the closed socket (EPIPE) and the reply was never read.
+			_ = conn.SetReadDeadline(time.Now().Add(ioTimeout))
+			_, _ = bufio.NewReader(conn).ReadString('\n')
 			_ = conn.SetWriteDeadline(time.Now().Add(ioTimeout))
 			_, _ = io.WriteString(conn, detail+"\n")
 		}
 		conn.Close()
 	}
+	return nil
+}
+
+// cmdReplace tries to put a socket of its own where path is: bind a unix
+// socket beside it, then rename that over path. Both steps need write access
+// to the directory, which is what a broker's socket directory withholds from
+// workers.
+func cmdReplace(args []string, r *reporter) error {
+	rest, err := parseFlags(newFlagSet("replace"), args, 1, 1)
+	if err != nil {
+		return err
+	}
+	ln, err := net.Listen("unix", rest[0]+".replace")
+	if err != nil {
+		r.deny("replace", err)
+		return nil
+	}
+	defer ln.Close() // unlinks the temporary name if the rename failed
+	r.result("replace", rest[0], os.Rename(rest[0]+".replace", rest[0]))
 	return nil
 }
 
