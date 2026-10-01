@@ -67,6 +67,28 @@ completion evidence; optional k6 work can come later. Platform research in
 `docs/agentic-platforms/` informs ideas and future software suggestions, but
 does not make unconfigured dependencies ready. See `docs/skills.md`.
 
+## Testing norm for project work
+
+Project work is the code no learner types as a lesson: shared prerequisites
+and helpers under `internal/`, harnesses, and the platform components and
+integration chunks in `docs/lessons/projects.md`. Plans for it live in
+`docs/plans/`. Lesson cores keep their own invariant checks and DuckDB
+analysis. Every project work item ships three layers of tests:
+
+1. **Spec tests.** One `TestSpec_<Item>_<Behaviour>` test per "Done when"
+   statement in the plan, so the plan maps to the test list.
+2. **Invariants.** Named checks in the package (`invariants.go`) that the
+   production path enforces and the tests call; state each one in the plan.
+3. **Property and fuzz tests.** Assert the invariants over generated inputs:
+   write the property once with `pgregory.net/rapid`, run it as
+   `TestProp_<Invariant>` and expose it to Go's fuzzer with `rapid.MakeFuzz`
+   as `Fuzz<Thing>`. A fuzz target asserts a property, never only "no panic".
+   Commit failing inputs under `testdata/fuzz/`.
+
+Run `make test` (no services needed) and `make fuzz`; tests that need a
+daemon or service are gated and run through their own target, such as
+`make check-docker`. See `knowledge/project-testing.md`.
+
 ## Before you commit or finish
 
 Reflect before every commit and every final summary of a task: did this work

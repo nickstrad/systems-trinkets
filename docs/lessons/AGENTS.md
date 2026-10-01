@@ -74,7 +74,10 @@ ranked list and nothing in it is implemented or planned. Each project has:
 The file opens with a "Start here" recommendation and a "Shared
 prerequisites" section listing configuration chunks (Go clients, harness
 launchers) that blocked ideas point to. Finishing a prerequisite flips
-catalog rows to `Configured: yes`; describing it does not.
+catalog rows to `Configured: yes`; describing it does not. Plans for
+prerequisites and integration chunks live in `docs/plans/` and follow the
+testing norm in the root `AGENTS.md`: each "Done when" becomes a spec test,
+with named invariants and property/fuzz tests over them.
 
 Use the repo-local `.claude/skills/draw-visual/SKILL.md` for project
 diagrams; keep Mermaid sources in `diagrams/`, regenerate embeds, and inspect

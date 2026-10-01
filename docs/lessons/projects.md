@@ -42,6 +42,9 @@ being needed to test correctness.
 Blocked lessons in ideas.md point at these chunks. Each is configuration work
 in the root module, not a lesson; finishing one flips the matching catalog
 rows in [software/software.md](../../software/software.md) to `Configured: yes`.
+The three Docker chunks have a work-item plan in
+[docs/plans/docker-harness-prereqs.md](../plans/docker-harness-prereqs.md);
+their rows stay `no` until its Mac gate passes.
 
 - **Go Docker client and isolation harness.** Add the Docker Engine API
   client to the root module and an `internal/lab` launcher that creates,
