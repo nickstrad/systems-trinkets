@@ -13,14 +13,22 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 )
+
+// forwardTimeout bounds each forwarded connection from accept to close. A
+// fixture request through the broker takes milliseconds; the cap keeps a
+// stalled client from holding the forwarder's shutdown (it waits for open
+// connections) until the engine kills it. A variable so tests can shorten it.
+var forwardTimeout = 10 * time.Second
 
 // cmdForward is the minimal egress broker for the H6 topology: it listens on a
 // unix socket and copies every connection, byte for byte, to one fixed TCP
 // destination. It never reads what it forwards, so it cannot choose another
 // destination or follow a redirect; destination and redirect policy are the
-// lesson's (worker-egress-grants), not this fixture's. SIGTERM closes the
-// listener, which removes the socket file, and the command exits 0.
+// lesson's (worker-egress-grants), not this fixture's. Each connection lives
+// at most forwardTimeout. SIGTERM closes the listener, which removes the
+// socket file; the command exits 0 once open connections end.
 func cmdForward(args []string, r *reporter) error {
 	fs := newFlagSet("forward")
 	umaskStr := fs.String("umask", "007", "octal umask applied while the socket is created")
@@ -66,12 +74,15 @@ func cmdForward(args []string, r *reporter) error {
 		go func() {
 			defer wg.Done()
 			defer conn.Close()
+			deadline := time.Now().Add(forwardTimeout)
+			_ = conn.SetDeadline(deadline)
 			up, err := net.DialTimeout("tcp", dest, ioTimeout)
 			if err != nil {
 				report(func() { r.deny("forward", err) })
 				return
 			}
 			defer up.Close()
+			_ = up.SetDeadline(deadline)
 			report(func() { r.ok("forward", "%s", dest) })
 			pipe(conn.(*net.UnixConn), up.(*net.TCPConn))
 		}()

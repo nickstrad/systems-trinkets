@@ -244,7 +244,6 @@ H3 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
   cgroupns, network, runtime), the cancelled-exec behaviour, and every
   timing.
 
-
 H6 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
 
 - **API.** `FixtureNetwork(ctx, cli, lesson)` creates the labelled bridge
@@ -260,7 +259,9 @@ H6 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
   each unix-socket connection byte for byte to one fixed TCP destination;
   it never parses the request, so it cannot pick another destination or
   follow a redirect (a passed-through 302 reaches the client as a 302). On
-  SIGTERM it closes the listener, which unlinks the socket file. `http-get
+  SIGTERM it closes the listener, which unlinks the socket file. Each
+  forwarded connection has a 10 s deadline, so a stalled client cannot hold
+  the broker's shutdown past it. `http-get
   <url>` does one GET, honours `HTTP_PROXY`, follows no redirect. Fixture
   counts are read by exec'ing `http-get http://127.0.0.1:<port>/__counts` in
   the fixture itself: no route from the host needed (container IPs are not
@@ -285,8 +286,11 @@ H6 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
   lookups fail because `resolv.conf` holds the host's resolver
   (`dial udp <host resolver>:53: connect: network is unreachable`), and
   `host.docker.internal` does not resolve. With `HTTP_PROXY` set to the
-  broker's address the client fails with `proxyconnect tcp: ... network is
-  unreachable`, proving the proxy path was tried.
+  broker's address the client fails with exactly `proxyconnect tcp: dial tcp
+  <broker IP>:3128: connect: network is unreachable`. The tests require that
+  whole reason: nothing listens on the proxy port, so with a route the probe
+  still fails, with `connection refused`, and a bare `proxyconnect` match
+  passed a networked worker (found in review).
 - **Socket path.** Broker `20000:30000` on the init'ed volume, worker
   `20001:20001` with group `30000`: one raw HTTP/1.0 request through the
   socket counted exactly once at the allowed fixture, zero at the blocked
@@ -311,4 +315,9 @@ H6 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
   keeps a host route, what `host.docker.internal` resolves to from a
   `network none` container (the probe accepts a lookup failure or no
   route), the worker's `resolv.conf`, and connect to a socket on a
-  read-only volume mount.
+  read-only volume mount. Docker Desktop's kernel may also list `tunl0` or
+  `ip6tnl0` in a `network none` namespace (a reviewer's recollection, not
+  checked); that would trip worker-has-no-route at the Mac gate and needs a
+  decision there, not a quiet allow-list. On Docker Desktop the "host" behind
+  the bridge gateway is the Linux VM, not the Mac, so the leftover host route
+  of an internal network reaches different services there.

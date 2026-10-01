@@ -552,11 +552,12 @@ services, and evidence that no other path exists. Depends on H5.
 - A minimal forwarder fixture (one fixed destination, no redirects) proves
   the path works. It is the probe's `forward` subcommand, a byte-for-byte
   copy that never parses the request; fixture counts are read with the
-  probe's `http-get` from inside each fixture, so no host route is needed. Destination grants and redirect rechecks come from the
-  learner's `worker-egress-grants` core when `enforced-egress-path` is built;
-  the harness does not pre-empt them. (projects.md words this chunk as a
-  broker that "enforces destination and redirect policy"; this plan moves
-  that policy to the lesson, and H6 updated that sentence.)
+  probe's `http-get` from inside each fixture, so no host route is needed.
+  Destination grants and redirect rechecks come from the learner's
+  `worker-egress-grants` core when `enforced-egress-path` is built; the
+  harness does not pre-empt them. (projects.md words this chunk as a broker
+  that "enforces destination and redirect policy"; this plan moves that
+  policy to the lesson, and H6 updated that sentence.)
 - Bypass probes from the worker, each expected to reach nothing: the blocked
   fixture's container IP, the allowed fixture's IP directly, the network
   gateway, `host.docker.internal`, alternate ports, a DNS lookup, and

@@ -207,8 +207,15 @@ func (s probeStep) denied(ctx context.Context, c *Container) (string, error) {
 const (
 	noRoute  = "network is unreachable"
 	noLookup = "lookup "
-	viaProxy = "proxyconnect"
 )
+
+// viaProxy is the one reason a proxied request may fail with: the client
+// tried the broker's address and found no route. Nothing listens on
+// proxyPort, so a worker with a route would still fail, with "connection
+// refused"; a looser match would pass it.
+func (tp *egressTopology) viaProxy() string {
+	return "proxyconnect tcp: dial tcp " + netip.AddrPortFrom(tp.brokerIP, proxyPort).String() + ": connect: " + noRoute
+}
 
 // bypassProbes is every path the plan names, from the worker: the two
 // fixtures' addresses, alternate ports on them, the gateway,
@@ -230,8 +237,8 @@ func (tp *egressTopology) bypassProbes() []probeStep {
 		dialStep("dns-blocked-name", "tcp", net.JoinHostPort(tp.blocked.Name, strconv.Itoa(fixturePort)), httpRequest("/bypass/blocked-name"), noLookup),
 		dialStep("dns-outside-name", "tcp", "example.com:80", httpRequest("/bypass/outside"), noLookup),
 		dialStep("broker-ip", "tcp", hp(tp.brokerIP, proxyPort), httpRequest("/bypass/broker"), noRoute),
-		httpGetStep("http-proxy-blocked", "http://"+hp(tp.blockedIP, fixturePort)+"/bypass/proxy", viaProxy),
-		httpGetStep("http-proxy-allowed-name", "http://"+net.JoinHostPort(tp.allowed.Name, strconv.Itoa(fixturePort))+"/bypass/proxy", viaProxy),
+		httpGetStep("http-proxy-blocked", "http://"+hp(tp.blockedIP, fixturePort)+"/bypass/proxy", tp.viaProxy()),
+		httpGetStep("http-proxy-allowed-name", "http://"+net.JoinHostPort(tp.allowed.Name, strconv.Itoa(fixturePort))+"/bypass/proxy", tp.viaProxy()),
 	}
 	for _, port := range []int{80, 443, 53, 2375} {
 		for _, f := range []struct {
@@ -433,9 +440,12 @@ func egressStep(tp *egressTopology) *rapid.Generator[probeStep] {
 		port := rapid.OneOf(rapid.SampledFrom([]int{fixturePort, 80, 443, 53, 22, 2375, proxyPort}), rapid.IntRange(1, 65535)).Draw(t, "port")
 		hostport := net.JoinHostPort(target, strconv.Itoa(port))
 		if kind == "dial" {
-			return dialStep("dial", "tcp", hostport, httpRequest(path))
+			// An address finds no route; a name fails to resolve (or, for
+			// host.docker.internal on Docker Desktop, resolves and then
+			// finds no route).
+			return dialStep("dial", "tcp", hostport, httpRequest(path), noRoute, noLookup)
 		}
-		return httpGetStep("http-get", "http://"+hostport+path)
+		return httpGetStep("http-get", "http://"+hostport+path, tp.viaProxy())
 	})
 }
 

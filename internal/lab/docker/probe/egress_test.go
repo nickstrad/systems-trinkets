@@ -158,3 +158,39 @@ func TestHTTPGetReportsStatusAndFollowsNoRedirect(t *testing.T) {
 		wantLine(t, lines, "http-get", false)
 	}
 }
+
+// A client that connects and then sends nothing must not hold the
+// forwarder's shutdown: its connection ends at forwardTimeout. The
+// destination is an HTTP server that would wait for a request forever.
+func TestForwardDeadlineEndsAStalledConnection(t *testing.T) {
+	old := forwardTimeout
+	forwardTimeout = 300 * time.Millisecond
+	t.Cleanup(func() { forwardTimeout = old })
+	front, _, _, _ := redirector(t)
+	sock := filepath.Join(t.TempDir(), "egress.sock")
+	var out syncBuffer
+	done := make(chan int, 1)
+	go func() { done <- run([]string{"forward", sock, front.Listener.Addr().String()}, &out, io.Discard) }()
+	waitFor(t, "listen line", func() bool { return strings.Contains(out.String(), "listen: OK") })
+
+	conn, err := net.Dial("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	waitFor(t, "forward line", func() bool { return strings.Contains(out.String(), "forward: OK") })
+	_ = syscall.Kill(os.Getpid(), syscall.SIGTERM)
+	select {
+	case c := <-done:
+		if c != 0 {
+			t.Errorf("exit = %d (%q)", c, out.String())
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a stalled connection held the forwarder past its deadline")
+	}
+	// The forwarder closed its side: the client reads EOF, not a timeout.
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if n, err := conn.Read(make([]byte, 1)); n != 0 || err != io.EOF {
+		t.Errorf("stalled client read %d bytes, err %v; want EOF", n, err)
+	}
+}
