@@ -46,7 +46,8 @@ const fixtureBinary = "/fixture"
 // OwnedDir is a directory baked into the image and owned by a numeric
 // identity. A named volume mounted there copies that ownership, so a non-root
 // worker can write the fresh volume (see knowledge/docker-harness.md). Path
-// must be absolute and already clean, and is limited to the characters
+// must be absolute and already clean, with no segment starting with ".wh."
+// (a layer whiteout), and is limited to the characters
 // [A-Za-z0-9._@+-] and "/": the builder expands "$" and "\" inside COPY
 // arguments even in JSON form and does not accept a quote, so those would
 // land at a different path. A path is rejected, never tidied, so a typo such
@@ -130,9 +131,15 @@ func validateOwnedPath(p string) error {
 		return fmt.Errorf("path is not clean (want %q)", path.Clean(p))
 	case p == fixtureBinary || strings.HasPrefix(p, fixtureBinary+"/"):
 		return fmt.Errorf("path collides with the fixture binary %s", fixtureBinary)
+	case strings.Contains(p, "/"+whiteoutPrefix):
+		return fmt.Errorf("a path segment starting with %q marks a deletion in image layers", whiteoutPrefix)
 	}
 	return nil
 }
+
+// whiteoutPrefix starts a file name that an image layer reads as "delete
+// this path" (an AUFS/OCI whiteout), so an owned directory may not use it.
+const whiteoutPrefix = ".wh."
 
 // validate checks everything that can be checked without a daemon or a
 // compiler, so a bad description fails before any work starts.

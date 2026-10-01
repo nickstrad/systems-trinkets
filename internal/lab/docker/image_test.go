@@ -203,10 +203,12 @@ func FuzzBuildStream(f *testing.F) {
 // ---- validation, Dockerfile, build context -------------------------------
 
 func TestValidateOwnedPath(t *testing.T) {
-	good := []string{"/work", "/a/b/c", "/a.b", "/a_b", "/a@b", "/a+b", "/a-b", "/A9", "/.hidden", "/...", "/fixtures", "/x/fixture", "/a..b"}
+	good := []string{"/work", "/a/b/c", "/a.b", "/a_b", "/a@b", "/a+b", "/a-b", "/A9", "/.hidden", "/...", "/fixtures", "/x/fixture", "/a..b",
+		"/.wh", "/.whx", "/x.wh.y", "/wh.", "/.Wh.x"}
 	bad := []string{"", "/", "work", "./work", "/work/", "/work/../etc", "/work/./x", "//work", "/a//b", "/..", "/.",
 		"/with space", `/quo"te`, "/quo'te", "/back\\slash", "/w$ork", "/x${y:-z}", "/a`b", "/a;b", "/a*b", "/a?b", "/a~b", "/a:b", "/a=b", "/a,b", "/a%b", "/a#b", "/a!b", "/a&b", "/a<b", "/é",
-		"/wo\nrk", "/wo\x00rk", "/wo\trk", "/wo\x7frk", "/\xff", "/fixture", "/fixture/sub"}
+		"/wo\nrk", "/wo\x00rk", "/wo\trk", "/wo\x7frk", "/\xff", "/fixture", "/fixture/sub",
+		"/.wh.work", "/a/.wh.b", "/a/.wh..wh..opq", "/.wh."}
 	for _, p := range good {
 		if err := validateOwnedPath(p); err != nil {
 			t.Errorf("validateOwnedPath(%q) = %v, want ok", p, err)
@@ -430,7 +432,7 @@ func genPath(t *rapid.T, label string) (string, bool) {
 	if p == fixtureBinary || strings.HasPrefix(p, fixtureBinary+"/") {
 		p = "/x" + p
 	}
-	switch rapid.SampledFrom([]string{"", "", "", "", "", "", "", "", "", "", "slash", "relative", "double", "dot", "dotdot", "newline", "nul", "tab", "del", "utf8", "root", "empty", "fixture", "fixture-sub", "unsafe", "unsafe"}).Draw(t, label+" breakage") {
+	switch rapid.SampledFrom([]string{"", "", "", "", "", "", "", "", "", "", "slash", "relative", "double", "dot", "dotdot", "newline", "nul", "tab", "del", "utf8", "root", "empty", "fixture", "fixture-sub", "unsafe", "unsafe", "whiteout"}).Draw(t, label+" breakage") {
 	case "":
 		return p, true
 	case "slash":
@@ -459,6 +461,10 @@ func genPath(t *rapid.T, label string) (string, bool) {
 		return "", false
 	case "fixture":
 		return "/fixture", false
+	case "whiteout":
+		// a layer whiteout marker as one segment
+		segs[rapid.IntRange(0, len(segs)-1).Draw(t, label+" whiteout segment")] = ".wh." + segs[0]
+		return "/" + strings.Join(segs, "/"), false
 	case "unsafe":
 		// characters the builder expands or mishandles, or outside the allow-list
 		return p + rapid.SampledFrom([]string{"$x", "${y:-z}", "\\", `"`, "'", " ", "`", ";", "*", "?", "~", ":", "é", "<", "&"}).Draw(t, label+" unsafe"), false
@@ -637,14 +643,14 @@ func moduleRoot(t *testing.T) string {
 
 // validOwnedPathForTest says whether a generated path is one genPath made
 // valid, without calling the implementation: valid paths start with "/" and use
-// only allow-listed characters, with no empty, "." or ".." segment and no
-// "fixture" first segment.
+// only allow-listed characters, with no empty, "." or ".." segment, no
+// segment starting with ".wh." and no "fixture" first segment.
 func validOwnedPathForTest(p string) bool {
 	if !strings.HasPrefix(p, "/") || p == "/" || strings.HasSuffix(p, "/") {
 		return false
 	}
 	for _, seg := range strings.Split(p[1:], "/") {
-		if seg == "" || seg == "." || seg == ".." || strings.Trim(seg, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._@+-") != "" {
+		if seg == "" || seg == "." || seg == ".." || strings.HasPrefix(seg, ".wh.") || strings.Trim(seg, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._@+-") != "" {
 			return false
 		}
 	}

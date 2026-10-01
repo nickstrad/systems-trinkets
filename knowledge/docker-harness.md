@@ -166,6 +166,84 @@ H2 (2026-10-01, Linux amd64, Engine 29.7.2, containerd image store):
   saved-image layout, `arm64` cross-compilation running (it builds and is
   checked as an arm64 ELF, but not executed), and every probe row (Mac gate).
 
+H3 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
+
+- **API for lessons and later items.** `Spec` (no `Privileged` field) and
+  `Mount{Type: MountVolume|MountTmpfs, Source, Target, ReadOnly, TmpfsSize}`
+  (no bind type). `Restricted(lesson, role, image, cmd...)` is the baseline;
+  `Spec{Lesson, Role, Image}` is Docker's default container.
+  `Translate(spec, socket, suffix) (Request{Name, Config, HostConfig}, error)`
+  is pure: `socket` is `SocketPath(cli.DaemonHost())`, `suffix` is
+  `NameSuffix()`. `Create`, `Start`, `Run` (one-shot `Result{ExitCode, Stdout,
+  Stderr, OOMKilled, Duration}`), and on the handle `Exec`, `Stop(ctx, grace)`,
+  `Wait`, `Logs`, `Inspect`, `Remove`. `Sweep`, `ListLesson`, `CheckNoLeak`,
+  `CreateVolume`. `Exec` does not apply the entrypoint: start the command with
+  `docker.FixtureBinary`.
+- **Decisions.** `Restricted` names `Runtime: "runc"` (the engine default here
+  and on Docker Desktop; explicit so a changed daemon default cannot change the
+  baseline; `""` still means engine default). It has no `/work` volume: a
+  volume outlives the container, so the lesson calls `CreateVolume` (labelled,
+  swept) and appends a `Mount`; the image needs an `OwnedDir` there. Private
+  IPC and cgroup namespaces are always sent by `Translate`, not Spec fields:
+  a plain `docker create` and a raw API create with an empty `HostConfig`
+  both record `IpcMode: private`, `CgroupnsMode: private` on this cgroup v2
+  engine, so the zero Spec is still the default container.
+  `restricted-complete` is enforced when the package loads (an `init` panics
+  if `Restricted` stops translating to a restricted container).
+- **Production path.** `Create` runs `Translate`, then `CheckConfig` (all
+  config invariants; a violation creates nothing), then `ContainerCreate`,
+  then `CheckObserved` against `ContainerInspect` (a mismatch removes the
+  container). `Run` and a failed `Start` remove their container on a context
+  detached from the caller's (`context.WithoutCancel` plus 30 s), so a
+  cancelled `ctx` still cleans up.
+- **Cancelled `Exec` does not stop the process.** The Engine API has no call
+  to signal an exec. `Exec` closes the hijacked stream on cancel
+  (`context.AfterFunc`) and returns `ctx.Err()` with the output so far and
+  `ExitCode -1`. Evidence: a cancelled `/fixture sleep 600` (pid 12) was still
+  in the probe's `pids` (`1 12 23`) afterwards; after `Stop` and a restart only
+  PID 1 and the `pids` probe itself were listed (the test counts entries,
+  because the probe can reuse the orphan's PID number: one run printed `1 12`). Bound a command by its own arguments or stop
+  the container.
+- **What the engine records (inspect).** `Config.User` comes from the image
+  when the request leaves it empty, `NetworkMode` becomes `bridge`, `Runtime`
+  becomes `runc`; `CheckObserved` accepts exactly those three fill-ins.
+  `Config.Labels` merges image labels (the container's win). The client
+  normalizes `CapAdd`/`CapDrop` before sending (upper case, `CAP_` prefix
+  except `ALL`, sorted, deduplicated); `Translate` does the same so intent and
+  record compare equal.
+- **Where failures surface.** `Runtime: "no-such-runtime"` fails at create
+  (`unknown or invalid runtime name: no-such-runtime`). `PIDMode:
+  "container:<missing>"` fails at create (`No such container`). A seccomp
+  profile with a bad action (`{"defaultAction":"SCMP_ACT_BOGUS"}`) passes
+  create and fails at start (`runc create failed: string SCMP_ACT_BOGUS is
+  not a valid action for seccomp`).
+- **Client gotchas.** `client.ParseHostURL("unix:///var/run/docker.sock")`
+  puts the socket path in `URL.Host`, not `URL.Path`. A 404 from the client
+  matches only `errors.Is(err, cerrdefs.ErrNotFound)` (containerd errdefs,
+  an indirect module here); an `interface{ NotFound() }` check does not match,
+  so the launcher asks `ContainerList` with an `id` filter whether a
+  container is gone instead of importing errdefs. `ContainerWait`'s result
+  channel is unbuffered: read it or cancel the wait's context.
+- **Timings here** (baseline only, shared daemon): one-shot `id` 0.28 s from
+  start to exit, exec round trip 46-90 ms, stop with a handled SIGTERM
+  0.15 s, `--ignore-term` with a 2 s grace killed after 2.16 s (exit 137).
+- **Tests.** Gated tests use a lesson label `h3-<test>-<random>` each; a
+  cleanup asserts no-leak for it before sweeping, so a handle that fails to
+  remove itself fails the test. The probe image is built once per package
+  run (`h3-pkg-<random>`) and removed in `TestMain`. `TestProp_LifecycleNoLeak`
+  is a `rapid` state machine (create, start, exec, stop, remove, sweep)
+  checked against `ContainerList` states; it caps itself at 4 checks and 12
+  steps by setting the `rapid.checks`/`rapid.steps` flags unless the caller
+  set them (flag or `RAPID_CHECKS`/`RAPID_STEPS`); about 25 s here. Planting
+  a no-op `Remove` made it fail on the first case; comparing uncleaned mount
+  sources made `TestProp_Translate` fail at once.
+- **H2 carry-over.** `OwnedDir` paths also reject any segment starting with
+  `.wh.`, which image layers read as a whiteout (a deletion marker).
+- Still unverified on Docker Desktop: `SocketPath` of its per-user socket,
+  `runc` as a named runtime there, the engine's recorded defaults (IPC,
+  cgroupns, network, runtime), the cancelled-exec behaviour, and every
+  timing.
+
 ## Deferred work (2026-10-01)
 
 H5 (Unix peer-identity) and H6 (Unix-socket egress) of the plan are specified

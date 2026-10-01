@@ -189,9 +189,10 @@ Peer identity across containers on one named volume:
 - A worker could not `chown` or `chmod` the socket.
 
 Not spiked, to be proven inside the work items: read-only bind or volume
-mounts (`ReadOnly: true`), OOM kill reporting, whether cancelling an exec's
-context stops the process inside the container, a worker trying to unlink or
+mounts (`ReadOnly: true`), OOM kill reporting, a worker trying to unlink or
 replace the socket, user-defined networks and every egress bypass probe.
+(Whether cancelling an exec's context stops the process was settled in H3:
+it does not.)
 
 ## Testing approach
 
@@ -225,7 +226,7 @@ Config invariants (pure, no daemon):
 | `labelled` | Labels `trinkets.harness=1` and a non-empty `trinkets.lesson` are present, and the name starts with `trinkets-<lesson>-` |
 | `swap-pinned` | `Memory > 0` implies `MemorySwap == Memory` |
 | `seccomp-inline` | A `seccomp=` option is `unconfined` or a JSON object |
-| `restricted-complete` | `IsRestricted(hostConfig)` holds for everything `Restricted()` returns: non-root numeric user, `CapDrop` contains `ALL`, no `CapAdd`, no-new-privileges, read-only root, network `none`, private PID/IPC/cgroup namespaces, memory, CPU and PID limits set |
+| `restricted-complete` | `IsRestricted(config, hostConfig)` holds for everything `Restricted()` returns (the user lives in `Config`): non-root numeric user, `CapDrop` contains `ALL`, no `CapAdd`, no-new-privileges, read-only root, network `none`, private PID/IPC/cgroup namespaces, memory, CPU and PID limits set |
 
 Observed-state invariants (daemon, gated):
 
@@ -406,7 +407,7 @@ type Spec struct {
     Cmd, Env     []string
     User         string   // "uid:gid"; "" keeps the image's USER
     Groups       []string // supplementary groups (GroupAdd)
-    Mounts       []Mount  // volume or tmpfs, explicit target, ReadOnly flag
+    Mounts       []Mount  // volume or tmpfs, explicit target, ReadOnly flag, TmpfsSize
     Network      string   // "none", "bridge" or a network name; "" = engine default
     ReadOnlyRoot bool
     CapDrop      []string
@@ -416,22 +417,29 @@ type Spec struct {
     PIDMode      string   // "" private, "container:<id>" shared
     Memory       int64    // bytes; swap is pinned to the same value
     NanoCPUs     int64
-    PidsLimit    int64
+    PidsLimit    int64    // 0 = engine default (no limit)
     Runtime      string   // OCI runtime handler; "" = engine default
 }
 
 func Restricted(lesson, role, image string, cmd ...string) Spec
 ```
 
-- `Restricted` returns the verified baseline above. The zero `Spec` plus an
-  image is Docker's default container, which is the lessons' broad baseline.
+- `Restricted` returns the verified baseline above, except the named volume
+  at `/work`: a volume outlives its container, so the lesson creates one with
+  `CreateVolume` (labelled, swept) and appends a `Mount`. Its `Runtime` is
+  `"runc"` by name. Private IPC and cgroup namespaces are not `Spec` fields:
+  `Translate` always sends them, which equals the engine default on cgroup v2
+  (checked in H3). The zero `Spec` plus lesson, role and image is Docker's
+  default container, which is the lessons' broad baseline.
 - Bind mounts from the macOS host are left out on purpose: named volumes and
   tmpfs avoid Docker Desktop file sharing. Add a bind type only when a lesson
   needs one.
-- Translation `Spec → (container.Config, container.HostConfig)` is a pure
-  function with table tests; it owns the socket-mount rejection and turns a
-  `Seccomp` value that looks like a path into an early error, since the
-  engine would only fail at start.
+- Translation `Translate(spec, socket, suffix) → Request{Name, Config,
+  HostConfig}` is a pure function with table tests (the resolved socket path
+  and the random name part are inputs, so it stays deterministic); it owns
+  the socket-mount rejection and turns a `Seccomp` value that is not `""`,
+  `unconfined` or a JSON object into an early error, since the engine would
+  only fail at start.
 - `Run(ctx, cli, spec) Result{ExitCode, Stdout, Stderr, OOMKilled, Duration}`
   for one-shot containers (wait registered before start). `Start` returns a
   handle with `Exec(ctx, cmd...) Result`, `Stop(ctx, grace)`, `Remove(ctx)`.
@@ -439,10 +447,10 @@ func Restricted(lesson, role, image string, cmd ...string) Spec
   collide. `Sweep(ctx, cli, lesson)` force-removes containers, volumes and
   networks with that lesson label; `Run` and handles remove their own
   container on the way out, `Sweep` is the net for crashes.
-- Every call takes a context. Decide and document what a cancelled `Exec`
-  does to the process inside the container (not spiked; the Engine API has
-  no exec-kill call, so the expected answer is "it keeps running until the
-  container stops").
+- Every call takes a context. A cancelled `Exec` returns `ctx.Err()` at
+  once and the process keeps running inside the container until the
+  container stops (verified in H3 with the probe's `pids`; the Engine API
+  has no exec-kill call).
 
 Done when:
 
@@ -452,8 +460,9 @@ Done when:
 - Gated tests: create/start/wait/logs/remove for a one-shot; exec exit codes
   0 and 2; stop within the grace period for a fixture that handles SIGTERM
   and a kill after it for one that ignores it; `Runtime: "no-such-runtime"`
-  fails at create with the engine's message; after each test
-  `docker ps -a --filter label=trinkets.harness` is empty.
+  fails at create with the engine's message; after each test nothing
+  carrying that test's own lesson label remains (filtering on
+  `trinkets.harness` alone would see other items sharing the daemon).
 - A test that leaks a container on purpose is cleaned by `Sweep`.
 
 ### H4. Isolation verification, Make targets, catalog
@@ -473,8 +482,8 @@ Goal: prove the boundary the catalog row describes, then publish it.
   `make help` prints. `harness` is not a name in `SERVICES`, so the generated
   `clean-<service>` rules do not collide. `check-docker` exists since H1
   (`TRINKETS_DOCKER=1 go test -count=1 ./internal/lab/docker/...`).
-- `TestProp_LifecycleNoLeak` and the `inspect-matches-intent` check land
-  here if H3 did not already include them.
+- `TestProp_LifecycleNoLeak` and the `inspect-matches-intent` check landed
+  in H3.
 - After the Mac gate (not part of the Linux implementation pass): flip `Docker Engine API`, `Docker isolation harness`
   and `cgroups v2` to `yes` in `software/software.md` with the import path,
   the helper package and the `make check-docker` command in `Setup`, and add
