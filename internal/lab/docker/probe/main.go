@@ -103,6 +103,8 @@ func init() {
 		{name: "dial", args: "<unix|tcp> <addr> [message]", doc: "connect; with a message send it and report the first reply line", fn: cmdDial},
 		{name: "peer-echo", args: "[--umask 007] [--count n] <socket>", doc: "listen on a unix socket and report each peer's SO_PEERCRED", fn: cmdPeerEcho},
 		{name: "http-count", args: "[--name n] <addr>", doc: "HTTP server counting requests per path; GET /__counts returns JSON", fn: cmdHTTPCount},
+		{name: "http-get", args: "<url>", doc: "one GET (honours HTTP_PROXY, follows no redirect); report status and first body line", fn: cmdHTTPGet},
+		{name: "forward", args: "[--umask 007] <socket> <host:port>", doc: "copy every unix socket connection to one fixed TCP destination", fn: cmdForward},
 		{name: "sleep", args: "[--ignore-term] [seconds]", doc: "wait; exit 0 on SIGTERM unless --ignore-term", fn: cmdSleep},
 		{name: "alloc", mutates: true, args: "<bytes>", doc: "allocate and touch memory, then exit", fn: cmdAlloc},
 		{name: "fork", mutates: true, args: "<n>", doc: "start up to n child processes and report how many started", fn: cmdFork},

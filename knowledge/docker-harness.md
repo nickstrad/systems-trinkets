@@ -362,3 +362,81 @@ H5 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
   setgid behaviour of its file sharing for named volumes (they live in the
   VM, so likely the same), and whether `connect` on a read-only mount works
   there.
+
+H6 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
+
+- **API.** `FixtureNetwork(ctx, cli, lesson)` creates the labelled bridge
+  network `trinkets-<lesson>-net-<random>` with `Internal: true` and returns
+  its name for `Spec.Network` (any network name passes `Translate`).
+  `CheckWorkerHasNoRoute(ctx, worker)` and `CheckBlockedFixtureUntouched(ctx,
+  blocked, port)` are the two H6 invariants, read from running probe
+  containers (`internal/lab/docker/egress.go`; pure parts in
+  `invariants.go`). `Sweep` and `CheckNoLeak` already covered networks
+  (`ListLesson` lists them by label); the sweep test proves the network,
+  the volume and all four containers go.
+- **Probe additions.** `forward [--umask 007] <socket> <host:port>` copies
+  each unix-socket connection byte for byte to one fixed TCP destination;
+  it never parses the request, so it cannot pick another destination or
+  follow a redirect (a passed-through 302 reaches the client as a 302). On
+  SIGTERM it closes the listener, which unlinks the socket file. Each
+  forwarded connection has a 10 s deadline, so a stalled client cannot hold
+  the broker's shutdown past it. `http-get
+  <url>` does one GET, honours `HTTP_PROXY`, follows no redirect. Fixture
+  counts are read by exec'ing `http-get http://127.0.0.1:<port>/__counts` in
+  the fixture itself: no route from the host needed (container IPs are not
+  routable from a Mac host), and `/__counts` is not counted.
+- **`Internal: true` finding.** A container on an internal network has no
+  default route and no recorded endpoint gateway (inspect `Gateway` is
+  empty; the IPAM config still names one). But the host's bridge interface
+  keeps the IPAM gateway address, and a dial to it reached the host's sshd
+  (listening on `0.0.0.0:22`). The docker0 address, the host's public and
+  private addresses and `1.1.1.1:443` gave `network is unreachable`; outside
+  names fail at the embedded DNS (`lookup example.com on 127.0.0.11:53:
+  server misbehaving`); container names on the network still resolve. On a
+  non-internal bridge every one of those dials succeeded. So the network
+  ships internal (the broker reaches the fixtures and only the host's bridge
+  address besides), and the worker gets `Network: "none"`, not an internal
+  network, because of that leftover host route.
+- **The worker with `Network: "none"`.** Interfaces `lo` only. Every IP
+  dial (fixtures on 8080, 80, 443, 53, 2375; gateway on 22 and 8080; the
+  broker) fails with `connect: network is unreachable`, which the tests
+  require: with the worker put on the network the same probes failed with
+  `connection refused` or succeeded, so the reason check matters. Name
+  lookups fail because `resolv.conf` holds the host's resolver
+  (`dial udp <host resolver>:53: connect: network is unreachable`), and
+  `host.docker.internal` does not resolve. With `HTTP_PROXY` set to the
+  broker's address the client fails with exactly `proxyconnect tcp: dial tcp
+  <broker IP>:3128: connect: network is unreachable`. The tests require that
+  whole reason: nothing listens on the proxy port, so with a route the probe
+  still fails, with `connection refused`, and a bare `proxyconnect` match
+  passed a networked worker (found in review).
+- **Socket path.** Broker `20000:30000` on the init'ed volume, worker
+  `20001:20001` with group `30000`: one raw HTTP/1.0 request through the
+  socket counted exactly once at the allowed fixture, zero at the blocked
+  one. `connect()` to the socket worked with the worker's volume mount
+  **read-only** (observed; the likely reason is that the kernel's read-only
+  check on write access skips socket inodes, not verified in source). After `Stop` of the broker the
+  worker gets `dial unix /sock/egress.sock: connect: no such file or
+  directory` and every bypass still fails.
+- **Tests.** Lesson labels `h6-<test>-<random>`; each test builds the whole
+  topology (about 3 s here) and sweeps it, then asserts no-leak. Controls
+  from the broker dial the fixtures without sending a request, so the
+  targets are shown reachable without being counted. `TestProp_EgressBypass`
+  draws up to 8 steps per case (raw dials carrying a request and `http-get`
+  through `HTTP_PROXY`, at any topology IP, name, the gateway,
+  `host.docker.internal` or `example.com`, on well-known or random ports,
+  mixed with requests through the socket), 5 cases by default; counts
+  accumulate on one topology, so the allowed total must equal the socket
+  requests sent. Mutations caught: a broker forwarding to the blocked
+  fixture (spec and property fail on blocked-fixture-untouched), and the
+  worker joined to the network (bypass, interfaces and property fail).
+- Still unverified on Docker Desktop: whether an internal network there
+  keeps a host route, what `host.docker.internal` resolves to from a
+  `network none` container (the probe accepts a lookup failure or no
+  route), the worker's `resolv.conf`, and connect to a socket on a
+  read-only volume mount. Docker Desktop's kernel may also list `tunl0` or
+  `ip6tnl0` in a `network none` namespace (a reviewer's recollection, not
+  checked); that would trip worker-has-no-route at the Mac gate and needs a
+  decision there, not a quiet allow-list. On Docker Desktop the "host" behind
+  the bridge gateway is the Linux VM, not the Mac, so the leftover host route
+  of an internal network reaches different services there.
