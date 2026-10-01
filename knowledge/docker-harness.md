@@ -244,3 +244,55 @@ H3 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
   cgroupns, network, runtime), the cancelled-exec behaviour, and every
   timing.
 
+H4 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
+
+- **Isolation table is asserted row by row.** `TestSpec_H4_GatedIsolationTable`
+  (`isolation_gated_test.go`) runs the probe as one-shot containers, the
+  battery plus `write /work`, `write /tmp`, `chown /work 0:0` and `dial tcp
+  1.1.1.1:53`, once as `Spec{User: "0:0"}` and once as `Restricted`, each with
+  its own named volume at `/work`, and checks 18 subtests named after the
+  probe (`cap-eff`, `pids.max`, ...). It replaced the H2 check that the probe
+  could report the rows. All 18 cells matched the spike's table, including
+  `CapEff` `00000000a80425fb`. Portable cells: default `pids.max` is "max or a
+  number" (9483 here), and default `dial` only has to differ from `network is
+  unreachable` (an offline host has a route and times out instead).
+- **Visible PIDs is 1 only for a one-shot.** In `Run` the probe is PID 1; in an
+  `Exec` into a running container the probe sees `1 <n>` (the container's init
+  and itself). The PID test therefore counts entries: two private containers
+  see 2 each, and after a third starts with `PIDMode: "container:<a>"` both it
+  and `a` see 3 while an untouched private `b` still sees 2.
+- **Read-only volume mounts work through `Mount.ReadOnly`.** The same volume
+  gives `read-only file system` mounted ReadOnly and writes fine read-write.
+- **OOM.** Restricted (64 MiB, swap pinned) running `alloc` of 128 MiB ends
+  with `OOMKilled` true and exit 137; 16 MiB exits 0 and not killed. Both
+  came back through `Run`'s `Result` with no extra code.
+- **Fork loop.** `fork 200` under `PidsLimit` 64 started 14 children then got
+  a fork error that must read `resource temporarily unavailable` (EAGAIN from
+  the pids cgroup; threads count, so far under 64). A control with `PidsLimit`
+  512 and 256 MiB forks 20 children cleanly.
+- **cgroup files** `memory.max`, `pids.max`, `cpu.max` read as `67108864`,
+  `64`, `50000 100000` from inside; `RestrictedNanoCPUs` 0.5 CPU is `50000`
+  of a `100000` period.
+- **`make clean-harness`** removes containers, networks, volumes and images
+  with `label=trinkets.harness=1` through docker CLI filters (an empty `ids`
+  skips each step, so a clean daemon succeeds; no `xargs -r`, which BSD
+  `xargs` on macOS lacks). It touches no compose service (they carry no
+  harness label). The author did not run it (other items shared the daemon). The reviewer ran
+  the recipe with the label swapped to a throwaway value, under `dash` and
+  `bash --posix`, covering a container using a network and a volume, an image
+  ID with two tags, an image in use and an empty-label rerun; everything was
+  removed and both runs exited 0. Never run it while another work item shares
+  the daemon.
+- **Tests that read repo files** (`repo_test.go`, no daemon): `make help` lists
+  `clean-harness`, and `software/software.md` still says `no` for `Docker
+  Engine API`, `Docker isolation harness` and `cgroups v2`, and the six
+  H1-H4 ideas keep their Blocked/Ready wording in `ideas.md` (the flip waits
+  for the Mac gate). Gated tests take their lesson label from `sweptLesson`
+  (`h4-<name>-<random>`); `testLesson` is the `h3-` wrapper.
+- **Full-package timing here**: `make check-docker` about 83 s; `make fuzz`
+  about 97 s with the 10 s default per target.
+- Still unverified on Docker Desktop: every row of the table (the Mac gate,
+  H7), notably default `CapEff`, `pids.max`, interfaces, whether `1.1.1.1:53`
+  routes from the VM, `OOMKilled` and exit 137 under its memory accounting,
+  and `PIDMode: "container:<id>"` there.
+
