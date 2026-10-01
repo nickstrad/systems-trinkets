@@ -32,8 +32,8 @@ Read a project like this:
 **Start here:** the Durable approval-based automation service. Every lesson it
 needs is ready today and it exercises the checkpoint, timer, signal and
 approval cores that the other four projects reuse. The Focused personal agent
-computer is the most complete study of the Muse architecture but most of its
-lessons wait on the shared Docker prerequisites below. Begin with one
+computer is the most complete study of the Muse architecture; its shared
+Docker prerequisites below are now built. Begin with one
 deterministic task fixture; an LLM can become another caller later without
 being needed to test correctness.
 
@@ -42,11 +42,13 @@ being needed to test correctness.
 Blocked lessons in ideas.md point at these chunks. Each is configuration work
 in the root module, not a lesson; finishing one flips the matching catalog
 rows in [software/software.md](../../software/software.md) to `Configured: yes`.
-The three Docker chunks have a work-item plan in
-[docs/plans/docker-harness-prereqs.md](../plans/docker-harness-prereqs.md);
-their rows stay `no` until its Mac gate passes.
+The three Docker chunks are done (2026-10-01): they live in
+`internal/lab/docker`, built from the work-item plan in
+[docs/plans/docker-harness-prereqs.md](../plans/docker-harness-prereqs.md),
+and their catalog rows are `yes`. The evidence is from Linux amd64; the
+suite has not yet run on Docker Desktop. The Go S3 helper is still open.
 
-- **Go Docker client and isolation harness.** Add the Docker Engine API
+- **Go Docker client and isolation harness (done).** Add the Docker Engine API
   client to the root module and an `internal/lab` launcher that creates,
   execs, stops and removes fixture containers through the active Docker
   context with non-root users, explicit mounts, private PID namespaces,
@@ -65,11 +67,12 @@ their rows stay `no` until its Mac gate passes.
   `LastModified` from `knowledge/seaweedfs-s3.md`. Unblocks
   `lazy-snapshot-chunks`, `parallel-image-restore`,
   `artifact-generation-publish` and `artifact-gc-grace`.
-- **Unix peer-identity harness.** Compose services for a Go broker and
-  fixed-UID Go workers sharing a dedicated socket directory on a named
-  volume, with UID-changing capabilities removed and a check that UID mapping
-  matches the broker ACL. Unblocks `peer-authenticated-tool-broker`.
-- **Unix-socket egress broker.** The same socket volume plus a broker service
+- **Unix peer-identity harness (done).** A Go broker and fixed-UID Go
+  workers, launched through the harness, sharing a dedicated socket directory
+  on a named volume, with UID-changing capabilities removed and a check that
+  the UID the broker sees is the UID assigned. Unblocks
+  `peer-authenticated-tool-broker`.
+- **Unix-socket egress broker (done).** The same socket volume plus a broker service
   that alone has network access to fixture services; the destination and
   redirect policy it enforces is the lesson's (`worker-egress-grants`), not
   the harness's. Workers run with `network_mode: none`. Unblocks
@@ -272,8 +275,9 @@ have bounded buffering and explicit loss accounting.
    `tenant-fair-queue` over deterministic jobs (all ready).
 2. `lease-reclaim` (planned) and `stale-owner-fencing`, connecting failure
    detection to safe result publication.
-3. `worker-capabilities` once the Go Docker client and isolation harness
-   exist; until then run the job function as a plain Go process.
+3. `worker-capabilities` on the shared Docker harness
+   (`internal/lab/docker`); before that lesson, run the job function as a
+   plain Go process.
 
 ### Follow-up lessons
 
@@ -397,7 +401,7 @@ make the downstream effect atomic with recording completion.
    container.
 2. `container-namespace-boundary` (ready with Compose) to learn what the cell
    must hide before building the cell.
-3. After the shared Docker, peer-identity and egress prerequisites:
+3. On the shared Docker, peer-identity and egress prerequisites (built):
    `worker-capabilities`, `focused-runtime-cell`,
    `peer-authenticated-tool-broker` and `enforced-egress-path`.
 
@@ -420,8 +424,8 @@ make the downstream effect atomic with recording completion.
   a dedicated socket directory through a named volume; the host-side Go
   launcher owns the Docker API. Done when a restart restores the intended
   boundaries and workspace and replacing workspace code cannot change
-  supervisor policy. Blocked on the shared Docker, peer-identity and egress
-  prerequisites.
+  supervisor policy. Builds on the shared Docker, peer-identity and egress
+  prerequisites, and on the four lessons that use them.
 - **Connector adapter.** One typed action to the fixture service with
   timeout/status reconciliation and bounded retries. Done when external
   success plus a lost reply is reconciled without a second effect.
@@ -622,7 +626,8 @@ since lazy input materialization shifts latency between them.
    preparation.
 3. After the shared Go S3 helper: `lazy-snapshot-chunks` and
    `parallel-image-restore`.
-4. After the shared Docker client plus BuildKit: `prepared-container-start`.
+4. After BuildKit is configured (the shared Docker client is built):
+   `prepared-container-start`.
 
 ### Follow-up lessons
 
@@ -642,8 +647,8 @@ since lazy input materialization shifts latency between them.
 - **Template and host adapter.** OCI build/import manifest, content identity,
   runtime compatibility, the Docker create/inspect/stop contract and a
   container readiness probe. Done when one template creates an independently
-  writable container and a failed start is cleaned up. Blocked on the shared
-  Docker client and BuildKit.
+  writable container and a failed start is cleaned up. Blocked on BuildKit;
+  the shared Docker client is built.
 - **Cache and pool coordination.** Concurrent fetch deduplication, cache
   limits, pin/evict rules, exact-match pool claims and bounded replenishment.
   Done when corrupt or partial templates never become ready and bursts and

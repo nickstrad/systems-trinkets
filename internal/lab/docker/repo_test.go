@@ -31,16 +31,29 @@ func TestSpec_H4_MakeHelpListsCleanHarness(t *testing.T) {
 	}
 }
 
-// TestSpec_H4_CatalogRowsUnchanged: the catalog rows for the harness stay
-// `no` in the Configured column until the Mac gate (plan, D4) passes.
-func TestSpec_H4_CatalogRowsUnchanged(t *testing.T) {
+// harnessRows are the catalog rows this package backs.
+var harnessRows = []string{
+	"Docker Engine API",
+	"cgroups v2",
+	"Docker isolation harness",
+	"Docker Unix peer-identity harness",
+	"Unix-socket egress broker",
+}
+
+// TestSpec_H4_CatalogRowsConfigured: the catalog rows for the harness say
+// `yes` in the Configured column (plan, D4: flipped 2026-10-01 on Linux
+// evidence), so the catalog cannot drift back while the package exists.
+func TestSpec_H4_CatalogRowsConfigured(t *testing.T) {
 	data, err := os.ReadFile(repoRoot + "/software/software.md")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Columns: Software | Layer | Use case | Configured | Setup.
 	const configured = 4
-	seen := map[string]string{"Docker Engine API": "", "Docker isolation harness": "", "cgroups v2": ""}
+	seen := map[string]string{}
+	for _, name := range harnessRows {
+		seen[name] = ""
+	}
 	for _, line := range strings.Split(string(data), "\n") {
 		cells := strings.Split(line, "|")
 		if len(cells) < configured+2 {
@@ -52,16 +65,16 @@ func TestSpec_H4_CatalogRowsUnchanged(t *testing.T) {
 		}
 	}
 	for name, got := range seen {
-		if got != "no" {
-			t.Errorf("software.md row %q: Configured = %q, want \"no\" until the Mac gate", name, got)
+		if got != "yes" {
+			t.Errorf("software.md row %q: Configured = %q, want \"yes\"", name, got)
 		}
 	}
 }
 
-// TestSpec_H4_IdeaReadinessUnchanged: the ideas the harness will unblock keep
-// their readiness wording in docs/lessons/ideas.md until the Mac gate (plan,
-// D4). Each idea's Software bullet says "Blocked: ..." or "Ready: ...".
-func TestSpec_H4_IdeaReadinessUnchanged(t *testing.T) {
+// TestSpec_H4_IdeaReadinessMatchesCatalog: the ideas the harness unblocks say
+// so in docs/lessons/ideas.md, and the one that still waits on BuildKit says
+// that. Each idea's Software bullet says "Blocked: ..." or "Ready: ...".
+func TestSpec_H4_IdeaReadinessMatchesCatalog(t *testing.T) {
 	data, err := os.ReadFile(repoRoot + "/docs/lessons/ideas.md")
 	if err != nil {
 		t.Fatal(err)
@@ -76,15 +89,18 @@ func TestSpec_H4_IdeaReadinessUnchanged(t *testing.T) {
 		sections[slug] += " " + strings.TrimSpace(line)
 	}
 	for slug, marker := range map[string]string{
-		"worker-capabilities":          "Blocked: the Go Docker client",
-		"focused-runtime-cell":         "Blocked: harness unconfigured",
-		"noisy-neighbor-limits":        "Blocked: Go Docker client unconfigured",
-		"container-namespace-boundary": "Ready: Compose expresses both variants",
-		"exec-cancel-reap":             "Ready: one Compose service",
-		"surrogate-credential-broker":  "Docker isolation harness (blocked)",
+		"worker-capabilities":            "Ready: `internal/lab/docker`",
+		"focused-runtime-cell":           "Ready: `internal/lab/docker`",
+		"noisy-neighbor-limits":          "Ready: `internal/lab/docker`",
+		"peer-authenticated-tool-broker": "Ready: `internal/lab/docker`",
+		"enforced-egress-path":           "Ready: `internal/lab/docker`",
+		"prepared-container-start":       "Blocked: BuildKit unconfigured",
+		"container-namespace-boundary":   "Ready: Compose expresses both variants",
+		"exec-cancel-reap":               "Ready: one Compose service",
+		"surrogate-credential-broker":    "Docker isolation harness (ready)",
 	} {
 		if !strings.Contains(sections[slug], marker) {
-			t.Errorf("idea %q no longer says %q", slug, marker)
+			t.Errorf("idea %q does not say %q", slug, marker)
 		}
 	}
 }

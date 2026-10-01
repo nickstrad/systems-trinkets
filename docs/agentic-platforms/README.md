@@ -55,6 +55,7 @@ Local ideas and complete projects must use Docker Desktop/Compose and Go.
 Firecracker and all KVM paths are excluded for now, as are separately managed
 VMs and alternate VM runtimes. Containerd/nerdctl is allowed for a specific
 lesson benefit with a configured local Linux engine. Provider architecture descriptions remain research,
-not dependencies. Docker Engine API, container RPC/PTY tooling and broker
-harnesses still need configuration before planning. See the catalog's local
+not dependencies. The Docker Engine API, isolation and broker harnesses are
+configured in `internal/lab/docker`; container RPC/PTY tooling still needs
+configuration before planning. See the catalog's local
 baseline and the replacement ideas in [ideas.md](../lessons/ideas.md).

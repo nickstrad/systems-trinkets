@@ -74,6 +74,13 @@ runtime verification. No readiness flag was promoted by this change.
 Provider research retains factual architecture descriptions without making
 those technologies dependencies. Root and scoped AGENTS.md carry the policy.
 
+Update 2026-10-01: the Docker API, isolation, Unix peer-identity and egress
+harnesses are implemented in `internal/lab/docker` and their catalog rows are
+`yes`, on Linux amd64 evidence only. The user chose to flip them before the
+suite ran on Docker Desktop and will fix any Mac failure when it shows up;
+see [docker-harness.md](docker-harness.md). BuildKit, the Go S3 client and
+daemon integrations are still open.
+
 Validation: documentation ranks/slugs, project references and relative links
 checked; no new harness was implemented or tested on a Mac. Linux requirements
 are distinct from KVM requirements: Docker supplies the Linux kernel for the

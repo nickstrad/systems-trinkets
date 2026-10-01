@@ -1,8 +1,9 @@
 # Plan: shared Docker harness prerequisites
 
-Status: **H1–H6 implemented and verified on Linux amd64 (2026-10-01, branch
-`docker-harness`); the Mac gate (H7) has not run.** Catalog rows stay `no`
-and the unblocked ideas stay blocked until H7 passes; see D4.
+Status: **H1–H6 implemented and verified on Linux amd64 (2026-10-01).**
+The catalog rows are `yes` and the idea and project docs are updated. The
+suite has not run on Docker Desktop; H7 is now a check to run on the Mac,
+not a gate (see D4).
 
 This plans the three Docker chunks under "Shared prerequisites" in
 [projects.md](../lessons/projects.md): the Go Docker client and isolation
@@ -40,10 +41,11 @@ Finishing a work item is what flips a catalog row in
 - **D3. Test gating.** Tests that need a daemon skip unless
   `TRINKETS_DOCKER=1` and run through `make check-docker`. `make test` and
   `make fuzz` are daemon-free.
-- **D4. When rows flip.** Only after the Mac gate (H7) passes for that item.
-  The repo baseline is Docker Desktop on macOS; the implementation evidence
-  is from Linux amd64 only. Until then the rows stay `no`, the ideas stay
-  blocked, and the catalog and idea doc sweeps in H4–H6 wait.
+- **D4. When rows flip.** Originally: only after the Mac check (H7) passed.
+  Changed by the user on 2026-10-01: the rows were flipped and the doc sweeps
+  done on Linux amd64 evidence, and any Docker Desktop failure gets fixed
+  when the suite first runs on the Mac. The catalog, the idea entries and
+  `knowledge/docker-harness.md` all say the Mac run is still outstanding.
 - **D5. Testing approach.** Decided 2026-09-30: spec tests, named invariants
   enforced by the harness, and fuzz targets that assert those invariants as
   properties. See Testing approach below; it is the norm for project work
@@ -292,7 +294,7 @@ as `perf/main.go` today.
 
 ## Work items
 
-Order: H1 → H2 → H3 → H4, then H5, then H6. H7 is the Mac gate and runs after
+Order: H1 → H2 → H3 → H4, then H5, then H6. H7 is the Mac check and runs after
 H4, H5 and H6 each. Each item is sized for one implementer and one review.
 "Done when" lists what must pass on the machine doing the work; each line
 becomes a `TestSpec_` test, and every item also lands the invariants,
@@ -477,11 +479,11 @@ Goal: prove the boundary the catalog row describes, then publish it.
   (`TRINKETS_DOCKER=1 go test -count=1 ./internal/lab/docker/...`).
 - `TestProp_LifecycleNoLeak` and the `inspect-matches-intent` check landed
   in H3.
-- After the Mac gate (not part of the Linux implementation pass): flip `Docker Engine API`, `Docker isolation harness`
+- Done 2026-10-01 without the Mac check (D4): flip `Docker Engine API`, `Docker isolation harness`
   and `cgroups v2` to `yes` in `software/software.md` with the import path,
   the helper package and the `make check-docker` command in `Setup`, and add
   a short "Docker harness" section under "Running configured software".
-- Doc sweep, with the flip and not before: readiness labels and Options lines for the
+- Doc sweep, done with the flip: readiness labels and Options lines for the
   ideas in the table at the top of this plan (`prepared-container-start`
   changes its blocker to BuildKit only), the "Shared prerequisites" bullet
   and the "once the harness exists" phrasing in projects.md, and the
@@ -493,8 +495,7 @@ Goal: prove the boundary the catalog row describes, then publish it.
   implementation proved and update `knowledge/index.md`.
 
 Done when: `make check`, `make test`, `make fuzz`, `make check-docker` and
-`make clean-harness` pass; `make ps` still lists only backing services; no
-catalog row or idea label has changed before the Mac gate.
+`make clean-harness` pass; `make ps` still lists only backing services.
 
 ### H5. Unix peer-identity harness
 
@@ -533,7 +534,7 @@ Done when (gated tests):
   `setuid` to the other worker's UID.
 - `VerifyPeerIdentity` passes here and its failure path is unit tested with a
   faked mismatch.
-- After the Mac gate: flip `Docker Unix peer-identity harness`, update
+- Done 2026-10-01 (D4): flip `Docker Unix peer-identity harness`, update
   `peer-authenticated-tool-broker` and the Focused personal agent computer
   notes.
 
@@ -579,15 +580,16 @@ Done when (gated tests):
 - The worker's interface list is `lo` only.
 - Stopping the broker makes the worker's request fail without a fallback path.
 - `Sweep` removes the network, volume and all four containers.
-- After the Mac gate: flip `Unix-socket egress broker`, update
+- Done 2026-10-01 (D4): flip `Unix-socket egress broker`, update
   `enforced-egress-path` and projects.md.
 
-### H7. Mac gate (Docker Desktop, arm64)
+### H7. Mac check (Docker Desktop, arm64)
 
-Run on the Mac after H4, H5 and H6: `make check && make test && make fuzz &&
-make check-docker && make clean-harness`. This is the user's step; the
-agents implementing H1–H6 work on Linux and cannot run it. Record the outcome with a date in
-`knowledge/docker-harness.md`; a row flips only after its gate passes (D4).
+Not run yet. On the Mac: `make check && make test && make fuzz &&
+make check-docker && make clean-harness`. The rows are already `yes` (D4), so
+this no longer gates anything; record the outcome with a date in
+`knowledge/docker-harness.md`, and treat a failing check as a finding to
+explain and fix there.
 Things expected to differ or still unknown there:
 
 - Socket path. Docker Desktop's context points at a per-user socket, and

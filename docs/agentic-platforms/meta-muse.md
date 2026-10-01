@@ -110,9 +110,10 @@ no live account integration or LLM API is required to learn the invariants.
 
 The local adaptation uses a restricted Docker worker, a Go peer-identity broker
 and network-disabled execution with Unix-socket action requests. It does not
-require nspawn, host eBPF, a separately managed Linux VM or KVM. Docker API,
-isolation and broker harnesses remain unconfigured in the catalog. Compose
-availability alone does not prove those boundaries; the full project must pass
+require nspawn, host eBPF, a separately managed Linux VM or KVM. The Docker
+API, isolation and broker harnesses are configured in `internal/lab/docker`
+(verified on Linux; not yet run on Docker Desktop). A harness passing its own
+checks does not prove a project's boundaries; the full project must pass
 the denied-operation and restart probes on the actual Docker deployment.
 
 Classifier training, browser automation, payment integrations, confidential

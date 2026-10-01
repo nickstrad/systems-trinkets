@@ -4,7 +4,11 @@ Applies when writing or using `internal/lab/docker` (the shared Docker
 prerequisites from `docs/lessons/projects.md`). The work-item plan, the full
 probe table and the list of what is still unverified are in
 [docs/plans/docker-harness-prereqs.md](../docs/plans/docker-harness-prereqs.md).
-Catalog rows stay `no` until that plan's Mac gate passes.
+The five catalog rows it covers were set to `yes` on 2026-10-01 at the
+user's decision, on Linux amd64 evidence; the suite has not run on Docker
+Desktop. On the Mac run `make check-docker` first and treat a failure as a
+finding to record here (the plan's "Mac check" section lists what is expected
+to differ).
 
 ## Verified 2026-09-30, scratch spike, Linux amd64, Engine 29.7.2 (API 1.55)
 
@@ -72,7 +76,7 @@ H1 (2026-10-01, Linux amd64, Engine 29.7.2, API 1.55):
   type); it also added 17 indirect modules (`golang.org/x/sys` was already
   required) and `pgregory.net/rapid`.
 - Still unverified on Docker Desktop: `Host()` against its per-user socket and
-  `EngineArch` returning `arm64` (the Mac gate, H7).
+  `EngineArch` returning `arm64` (the Mac check, H7).
 
 
 H2 (2026-10-01, Linux amd64, Engine 29.7.2, containerd image store):
@@ -164,7 +168,7 @@ H2 (2026-10-01, Linux amd64, Engine 29.7.2, containerd image store):
   drop blank probe lines) made the matching property fail.
 - Still unverified on Docker Desktop: the classic `ImageBuild` path, the
   saved-image layout, `arm64` cross-compilation running (it builds and is
-  checked as an arm64 ELF, but not executed), and every probe row (Mac gate).
+  checked as an arm64 ELF, but not executed), and every probe row (Mac check).
 
 H3 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
 
@@ -287,11 +291,11 @@ H4 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
   `clean-harness`, and `software/software.md` still says `no` for `Docker
   Engine API`, `Docker isolation harness` and `cgroups v2`, and the six
   H1-H4 ideas keep their Blocked/Ready wording in `ideas.md` (the flip waits
-  for the Mac gate). Gated tests take their lesson label from `sweptLesson`
+  for the Mac check). Gated tests take their lesson label from `sweptLesson`
   (`h4-<name>-<random>`); `testLesson` is the `h3-` wrapper.
 - **Full-package timing here**: `make check-docker` about 83 s; `make fuzz`
   about 97 s with the 10 s default per target.
-- Still unverified on Docker Desktop: every row of the table (the Mac gate,
+- Still unverified on Docker Desktop: every row of the table (the Mac check,
   H7), notably default `CapEff`, `pids.max`, interfaces, whether `1.1.1.1:53`
   routes from the VM, `OOMKilled` and exit 137 under its memory accounting,
   and `PIDMode: "container:<id>"` there.
@@ -436,7 +440,17 @@ H6 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
   route), the worker's `resolv.conf`, and connect to a socket on a
   read-only volume mount. Docker Desktop's kernel may also list `tunl0` or
   `ip6tnl0` in a `network none` namespace (a reviewer's recollection, not
-  checked); that would trip worker-has-no-route at the Mac gate and needs a
+  checked); that would trip worker-has-no-route at the Mac check and needs a
   decision there, not a quiet allow-list. On Docker Desktop the "host" behind
   the bridge gateway is the Linux VM, not the Mac, so the leftover host route
   of an internal network reaches different services there.
+
+## Catalog flip and its guard tests (2026-10-01)
+
+The five harness rows in `software/software.md` are `yes` and the idea and
+project docs describe the harness as ready, at the user's decision and before
+any Docker Desktop run. `internal/lab/docker/repo_test.go` pins this:
+`TestSpec_H4_CatalogRowsConfigured` reads the Configured column for those
+rows and `TestSpec_H4_IdeaReadinessMatchesCatalog` checks the readiness
+wording of nine idea entries. Rewording those entries or changing a row makes
+`make test` fail, so update the test in the same change.

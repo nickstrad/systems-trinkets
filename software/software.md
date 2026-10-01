@@ -64,9 +64,9 @@ stopped).
 | pgvector | Storage | Agent memory and retrieval | no | swap the image to `pgvector/pgvector:pg18` in `postgres.compose.yaml` |
 | PgBouncer | Storage | Thousands of runners against one PostgreSQL; transaction versus session pooling | yes | `pgbouncer.compose.yaml`, start postgres first; `postgres://trinkets:trinkets@localhost:6432/trinkets`, admin console `postgres://trinkets:trinkets@localhost:6432/pgbouncer`; knobs `PGBOUNCER_POOL_MODE` (transaction) and `PGBOUNCER_POOL_SIZE` (5) |
 | ClickHouse | Storage | Usage and event analytics at scale | no | compose; reference, DuckDB covers the lesson value |
-| Docker Engine API | Isolation | Honest sandbox-host stand-in: create, exec, stop, kill, cgroup limits, OOM, stats, idle reaping | no | Go client through the active Docker endpoint/context; host-side launcher only, never mount the Docker socket in an untrusted worker |
+| Docker Engine API | Isolation | Honest sandbox-host stand-in: create, exec, stop, kill, cgroup limits, OOM, stats, idle reaping | yes | Go `github.com/moby/moby/client` through `internal/lab/docker`: `docker.Connect(ctx)` uses `DOCKER_HOST`, then the active Docker context; host-side launcher only, never mount the Docker socket in an untrusted worker; verified on Linux amd64 (2026-10-01); not yet run on Docker Desktop |
 | containerd + runc + nerdctl | Isolation | OCI image/snapshot/task lifecycle below Docker; optional when an idea benefits from the lower-level API | no | Go client or nerdctl with a configured local Linux engine accessible from macOS; no KVM or separate VM requirement; Docker remains the service default |
-| cgroups v2 | Isolation | CPU throttling, memory limits, per-sandbox usage numbers | no | read `/sys/fs/cgroup` from Go inside a container |
+| cgroups v2 | Isolation | CPU throttling, memory limits, per-sandbox usage numbers | yes | read `/sys/fs/cgroup` from Go inside a container; `memory.max`, `pids.max` and `cpu.max` are checked by `make check-docker`; verified on Linux amd64 (2026-10-01); not yet run on Docker Desktop |
 | Apple `container` | Isolation | One Linux VM per container on this Mac: boot latency, per-VM disks | no | outside baseline; installed but not a lesson/project dependency |
 | Lima | Isolation | A Linux guest on this Mac when a lesson needs one | no | outside baseline; no separate Linux VM or nested virtualization path |
 | Firecracker | Isolation | MicroVM boot, snapshot and restore, memory lazy-loading, vsock (E2B, Vercel Sandbox) | no | avoid for now: requires KVM; no setup or project integration |
@@ -76,9 +76,9 @@ stopped).
 | libkrun, krunvm | Isolation | MicroVM on Hypervisor.framework; Podman machine's macOS provider | no | outside baseline; no alternate VM runtime |
 | bubblewrap, nsjail, Landlock, seccomp | Isolation | Process confinement as used by Claude Code and Codex CLI on Linux | no | reference for standalone sandboxes; project seccomp/capability policy uses the Docker isolation harness |
 | `sandbox-exec` (Seatbelt) | Isolation | macOS process confinement; the same story on this Mac | no | outside baseline; use Docker process boundaries |
-| Docker isolation harness | Isolation | Private PID namespaces, explicit mounts, non-root workers, dropped capabilities, no-new-privileges, seccomp and network-disabled execution | no | Go launcher using Docker Engine API; harmless fixtures on Docker Desktop; no host namespace or KVM setup |
-| Docker Unix peer-identity harness | Identity | Broker UID/GID authentication and method ACLs with separate fixed-UID workers | no | Go inside Linux containers; dedicated Unix sockets on Docker named volumes, protected socket directory, no UID-changing capabilities; validate UID mapping |
-| Unix-socket egress broker | Networking | Mediate narrow fixture actions when a worker has no direct network | no | Go broker plus Docker network_mode: none worker; broker alone has fixture network access; explicit destination/redirect policy |
+| Docker isolation harness | Isolation | Private PID namespaces, explicit mounts, non-root workers, dropped capabilities, no-new-privileges, seccomp and network-disabled execution | yes | `internal/lab/docker`: `BuildFixture`, `Spec` and `Restricted`, `Run`/`Start`/`Exec`, `Sweep`; `make check-docker`, `make clean-harness`; no host namespace or KVM setup; verified on Linux amd64 (2026-10-01); not yet run on Docker Desktop |
+| Docker Unix peer-identity harness | Identity | Broker UID/GID authentication and method ACLs with separate fixed-UID workers | yes | `internal/lab/docker`: `SocketVolume`, `BrokerSpec`, `WorkerSpec`, `VerifyPeerIdentity`; dedicated Unix socket on a Docker named volume, protected socket directory, no UID-changing capabilities; the ACL is the lesson's; verified on Linux amd64 (2026-10-01); not yet run on Docker Desktop |
+| Unix-socket egress broker | Networking | Mediate narrow fixture actions when a worker has no direct network | yes | `internal/lab/docker`: `FixtureNetwork` plus the socket volume, a `network_mode: none` worker and a broker that alone reaches fixtures; topology and bypass checks only, the destination/redirect policy is the lesson's; verified on Linux amd64 (2026-10-01); not yet run on Docker Desktop |
 | wazero | Isolation | In-process WebAssembly with fuel metering, memory limits, cancellation | no | library, `github.com/tetratelabs/wazero` |
 | wasmtime, WASI | Isolation | Same lesson from the CLI; WASI filesystem capabilities | no | brew; reference |
 | CRIU | Isolation | Checkpoint and restore a process tree | no | reference only; no process-memory checkpoint/restore dependency |
@@ -290,3 +290,25 @@ stores SCRAM verifiers; the entrypoint writes the plaintext password to
 healthcheck only proves PgBouncer is listening, not that PostgreSQL is up,
 and after a PostgreSQL restart the first query can fail for about 15 s
 (`server_login_retry`).
+
+### Docker harness (`internal/lab/docker`)
+
+Not a service: a Go package lessons import to build fixture images and run
+them as containers with explicit isolation settings. It connects to the
+daemon the `docker` CLI uses (`DOCKER_HOST`, then the active context) and
+needs no credentials. Everything it creates is labelled
+`trinkets.harness=1` and `trinkets.lesson=<name>`.
+
+    make test            # spec and property tests, fuzz seeds; no daemon
+    make fuzz            # every fuzz target for FUZZTIME (default 10s)
+    make check-docker    # tests against the daemon (about 3 minutes)
+    make clean-harness   # remove anything the harness labelled
+
+It covers the rows `Docker Engine API`, `cgroups v2`, `Docker isolation
+harness`, `Docker Unix peer-identity harness` and `Unix-socket egress
+broker`. Those rows were set to `yes` on 2026-10-01 from Linux amd64 evidence
+(Engine 29.7.2); the suite has not yet run on Docker Desktop. If
+`make check-docker` fails on the Mac, treat the failing check as a finding:
+see the "Mac check" list in
+[docs/plans/docker-harness-prereqs.md](../docs/plans/docker-harness-prereqs.md)
+and [knowledge/docker-harness.md](../knowledge/docker-harness.md).

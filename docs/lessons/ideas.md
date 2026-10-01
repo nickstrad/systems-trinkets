@@ -53,14 +53,13 @@ Research: [Daytona](../agentic-platforms/daytona.md),
 - Invariant: allowed probes succeed; denied probes have no effect on protected
   fixtures.
 - Measure: allowed/denied probe counts; operation latency ms.
-- Software: Go; Docker Engine API and Docker isolation harness. Blocked: the
-  Go Docker client and launcher are unconfigured (see the shared prerequisites
-  in projects.md). Goroutines are not a security boundary.
+- Software: Go; Docker Engine API and Docker isolation harness. Ready:
+  `internal/lab/docker` (verified on Linux; not yet run on Docker Desktop).
+  Goroutines are not a security boundary.
 - Options: Docker Compose services with read-only/read-write volumes and
   `network_mode: none`, launched from Go with `docker compose run` (no setup;
   static fixtures only) · Docker Engine API Go client plus isolation harness
-  for dynamic create/exec (setup: catalog rows `Docker Engine API` and
-  `Docker isolation harness` are `no`).
+  for dynamic create/exec (no setup).
 
 ### focused-runtime-cell
 
@@ -72,12 +71,11 @@ Research: [Daytona](../agentic-platforms/daytona.md),
 - Invariant: the worker cannot modify supervisor policy/state or inspect
   supervisor processes; approved tasks still work.
 - Measure: forbidden successes; allowed task failures; startup ms.
-- Software: Go; Docker Engine API and Docker isolation harness. Blocked:
-  harness unconfigured.
+- Software: Go; Docker Engine API and Docker isolation harness. Ready:
+  `internal/lab/docker` (verified on Linux; not yet run on Docker Desktop).
 - Options: Docker Compose with `user`, `cap_drop`, `security_opt` (no-new-
   privileges, seccomp), `pid` and explicit volumes (no setup; static
-  topology) · Docker Engine API Go client plus isolation harness (setup: both
-  catalog rows `no`).
+  topology) · Docker Engine API Go client plus isolation harness (no setup).
 - Builds on: `worker-capabilities` (same harness and probe style; this adds
   the supervisor as the protected party).
 
@@ -96,7 +94,7 @@ Research: [Daytona](../agentic-platforms/daytona.md),
   separate-kernel claim.
 - Options: Docker Compose with `pid: "service:<name>"` and named volumes,
   probes in Go (no setup) · Docker Engine API Go client if containers must be
-  created dynamically (setup: catalog row `no`).
+  created dynamically (no setup).
 - Follow-up: the same probe under runc versus gVisor's `runsc` through the
   launcher's runtime-handler parameter, to see what a user-space kernel hides
   (reported kernel, synthetic `/proc`, accounting-only in-sandbox cgroups).
@@ -113,12 +111,12 @@ Research: [Daytona](../agentic-platforms/daytona.md),
 - Invariant: the configured hard memory limit is enforced; allocation failures
   and OOM outcomes are recorded.
 - Measure: neighbor p95 ms; throttled ms; peak bytes; OOM count.
-- Software: Go; Docker Engine API and cgroups v2. Blocked: Go Docker client
-  unconfigured. No macOS host-limit claim.
+- Software: Go; Docker Engine API and cgroups v2. Ready:
+  `internal/lab/docker` (verified on Linux; the cgroup v2 files are not yet
+  checked in Docker Desktop). No macOS host-limit claim.
 - Options: Docker Compose `mem_limit`/`cpus` with Go reading `/sys/fs/cgroup`
-  inside each container (no setup once the cgroup v2 files are verified in
-  Docker Desktop; flip the `cgroups v2` row to `yes`) · Docker Engine API
-  stats and OOM events (setup: catalog row `no`).
+  inside each container (no setup) · Docker Engine API limits, stats and OOM
+  events through the harness (no setup).
 
 ## Sandbox identity and lifecycle
 
@@ -358,10 +356,11 @@ Research: [E2B](../agentic-platforms/e2b.md),
   state; a warm instance is claimed at most once.
 - Measure: ready ms; first-command ms; preparation ms; idle container-ms;
   failures.
-- Software: Go; Docker Engine API and BuildKit. Blocked: Go Docker client
-  unconfigured. No memory checkpoint/restore claim.
-- Options: Docker Engine API plus BuildKit through Go (setup: both catalog
-  rows `no`) · partial: Compose `build:` for the baked image and the OCI
+- Software: Go; Docker Engine API and BuildKit. Blocked: BuildKit
+  unconfigured (the Docker client is ready). No memory checkpoint/restore
+  claim.
+- Options: Docker Engine API plus BuildKit through Go (setup: catalog row
+  `BuildKit` is `no`) · partial: Compose `build:` for the baked image and the OCI
   registry to push/pull it, timing via `docker compose up` from Go (no setup;
   no dynamic warm claims).
 - Builds on: `warm-pool-claims`.
@@ -467,13 +466,14 @@ Research: [Daytona](../agentic-platforms/daytona.md),
 - Invariant: a forged request field cannot expand the authenticated peer's
   method or credential scope.
 - Measure: unauthorized accepts; ACL denials; dispatch ms.
-- Software: Go; Docker Unix peer-identity harness. Blocked: harness
-  unconfigured; broker and sockets stay inside Docker Linux.
-- Options: Go `SO_PEERCRED` broker and fixed-UID workers as Compose services
-  sharing a socket volume with `cap_drop` (setup: catalog row `Docker Unix
-  peer-identity harness` is `no`; Compose can host it, the missing piece is
-  the launcher and UID validation) · OpenBao per-worker tokens as a weaker
-  identity baseline (no setup).
+- Software: Go; Docker Unix peer-identity harness. Ready:
+  `internal/lab/docker` (verified on Linux; not yet run on Docker Desktop);
+  broker and sockets stay inside Docker Linux.
+- Options: Go `SO_PEERCRED` broker and fixed-UID workers launched through the
+  harness (`SocketVolume`, `BrokerSpec`, `WorkerSpec`), sharing a socket
+  volume with all capabilities dropped; call `VerifyPeerIdentity` before
+  measuring (no setup) · OpenBao per-worker tokens as a weaker identity
+  baseline (no setup).
 
 ### exec-request-dedup
 
@@ -519,7 +519,7 @@ Research: [Daytona](../agentic-platforms/daytona.md),
 - Software: Go; Docker Compose. Ready: one Compose service running the Go
   fixture tree is enough; escaped sessions are outside this fixture.
 - Options: One Docker Compose service running the Go fixture tree (no setup)
-  · Docker Engine API exec for a dynamic variant (setup: catalog row `no`).
+  · Docker Engine API exec for a dynamic variant (no setup).
 
 ## Networking and access boundaries
 
@@ -571,11 +571,11 @@ Research: [Daytona](../agentic-platforms/daytona.md),
   the raw token; the token is absent from worker-visible output and errors.
 - Measure: token exposure probes; scope violations; broker ms.
 - Software: Go; OpenBao and PostgreSQL. Ready with the worker as a plain Go
-  process. The restricted-container worker is a later step that needs the
-  Docker isolation harness (blocked).
+  process. The restricted-container worker is a later step on the Docker
+  isolation harness (ready).
 - Options: OpenBao secrets redeemed by a Go broker, handles in PostgreSQL,
-  worker as a Go process (no setup) · restricted container worker (setup:
-  catalog row `Docker isolation harness` is `no`).
+  worker as a Go process (no setup) · restricted container worker through
+  `internal/lab/docker` (no setup).
 
 ### enforced-egress-path
 
@@ -588,11 +588,13 @@ Research: [Daytona](../agentic-platforms/daytona.md),
   tested path; the approved broker action works.
 - Measure: bypass successes; blocked requests; broker overhead ms.
 - Software: Go; Docker isolation harness and Unix-socket egress broker.
-  Blocked: harnesses unconfigured. Narrow actions, not a transparent proxy.
-- Options: Compose worker with `network_mode: none` plus a broker service on
-  a shared socket volume (setup: catalog rows `Docker isolation harness` and
-  `Unix-socket egress broker` are `no`; Compose can host both) · Toxiproxy as
-  the only reachable fixture upstream to prove the block (no setup).
+  Ready: `internal/lab/docker` (verified on Linux; not yet run on Docker
+  Desktop). Narrow actions, not a transparent proxy.
+- Options: a `network_mode: none` worker plus a broker on a shared socket
+  volume and a fixture network, launched through the harness
+  (`FixtureNetwork`, `SocketVolume`); the broker's policy is this lesson's
+  code (no setup) · Toxiproxy as the only reachable fixture upstream to prove
+  the block (no setup).
 - Builds on: `worker-egress-grants` (the policy half, ready today).
 
 ### worker-egress-grants
