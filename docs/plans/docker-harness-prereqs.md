@@ -1,8 +1,8 @@
 # Plan: shared Docker harness prerequisites
 
-Status: **H1–H6 in implementation** (plan written 2026-09-30; the user asked
-for AI implementation the same day). Catalog rows stay `no` until the Mac gate
-(H7) passes; see D4.
+Status: **H1–H6 implemented and verified on Linux amd64 (2026-10-01, branch
+`docker-harness`); the Mac gate (H7) has not run.** Catalog rows stay `no`
+and the unblocked ideas stay blocked until H7 passes; see D4.
 
 This plans the three Docker chunks under "Shared prerequisites" in
 [projects.md](../lessons/projects.md): the Go Docker client and isolation
