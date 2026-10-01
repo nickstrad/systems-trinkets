@@ -65,12 +65,16 @@ func wantLine(t *testing.T, lines []probeout.Line, name string, ok bool) probeou
 
 // TestUsageErrorsExit2 runs only argument sets that fail before any action,
 // so setting the marker (to get past the guard) cannot change the machine.
+// Every path argument still points into a temp dir, in case a usage check
+// ever regresses into an action.
 func TestUsageErrorsExit2(t *testing.T) {
 	t.Setenv(markerEnv, "1")
+	dir := t.TempDir()
+	x, a, b := filepath.Join(dir, "x"), filepath.Join(dir, "a"), filepath.Join(dir, "b")
 	for _, args := range [][]string{
-		nil, {"nope"}, {"write"}, {"write", "a", "b"}, {"chown", "/x", "nocolon"}, {"chmod", "/x", "9"},
-		{"chmod", "/x", "17777"}, {"setuid", "root"}, {"alloc", "-1"}, {"alloc"}, {"fork", "0"},
-		{"dial", "udp", "x"}, {"peer-echo"}, {"sleep", "-x"}, {"sleep", "abc"}, {"initdir", "/x", "1:2"},
+		nil, {"nope"}, {"write"}, {"write", a, b}, {"chown", x, "nocolon"}, {"chmod", x, "9"},
+		{"chmod", x, "17777"}, {"setuid", "root"}, {"alloc", "-1"}, {"alloc"}, {"fork", "0"},
+		{"dial", "udp", x}, {"peer-echo"}, {"sleep", "-x"}, {"sleep", "abc"}, {"initdir", x, "1:2"},
 		{"id", "extra"}, {"http-count"},
 	} {
 		var out, errOut bytes.Buffer

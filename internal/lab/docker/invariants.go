@@ -3,8 +3,13 @@ package docker
 import (
 	"fmt"
 	"path"
+	"reflect"
+	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
 )
 
 // Named invariants. Each is a small function that returns the violations it
@@ -35,6 +40,287 @@ func contextNamesClean(files []contextFile) []string {
 			bad = append(bad, fmt.Sprintf("%s: %q appears twice", InvContextNamesClean, n))
 		}
 		seen[n] = true
+	}
+	return bad
+}
+
+// Config invariants (plan, "Testing approach"). CheckConfig runs them all
+// before every ContainerCreate; a violation is an error and nothing is
+// created. Each message starts with the invariant's name.
+const (
+	InvNoDockerSocket     = "no-docker-socket"
+	InvNeverPrivileged    = "never-privileged"
+	InvLabelled           = "labelled"
+	InvSwapPinned         = "swap-pinned"
+	InvSeccompInline      = "seccomp-inline"
+	InvRestrictedComplete = "restricted-complete"
+	InvInspectMatches     = "inspect-matches-intent"
+	InvNoLeak             = "no-leak"
+)
+
+// noDockerSocket: no emitted mount is a bind mount, and no mount source,
+// after path.Clean, is /var/run/docker.sock, /run/docker.sock or the resolved
+// Host() socket path (socket, "" when the endpoint is not a unix socket).
+func noDockerSocket(hc container.HostConfig, socket string) []string {
+	var bad []string
+	for _, b := range hc.Binds {
+		bad = append(bad, fmt.Sprintf("%s: bind mount %q", InvNoDockerSocket, b))
+	}
+	for _, m := range hc.Mounts {
+		if m.Type == mount.TypeBind {
+			bad = append(bad, fmt.Sprintf("%s: bind mount of %q at %q", InvNoDockerSocket, m.Source, m.Target))
+		}
+		if isDockerSocket(m.Source, socket) {
+			bad = append(bad, fmt.Sprintf("%s: mount source %q is the Docker socket", InvNoDockerSocket, m.Source))
+		}
+	}
+	return bad
+}
+
+// neverPrivileged: Privileged is false and no namespace mode (PidMode,
+// NetworkMode, IpcMode, UTSMode, UsernsMode, CgroupnsMode) is host.
+func neverPrivileged(hc container.HostConfig) []string {
+	var bad []string
+	if hc.Privileged {
+		bad = append(bad, InvNeverPrivileged+": Privileged is true")
+	}
+	for _, ns := range []struct{ name, mode string }{
+		{"PidMode", string(hc.PidMode)},
+		{"NetworkMode", string(hc.NetworkMode)},
+		{"IpcMode", string(hc.IpcMode)},
+		{"UTSMode", string(hc.UTSMode)},
+		{"UsernsMode", string(hc.UsernsMode)},
+		{"CgroupnsMode", string(hc.CgroupnsMode)},
+	} {
+		if ns.mode == "host" {
+			bad = append(bad, fmt.Sprintf("%s: %s is host", InvNeverPrivileged, ns.name))
+		}
+	}
+	return bad
+}
+
+// labelled: labels trinkets.harness=1 and a non-empty trinkets.lesson are
+// present, and the name starts with trinkets-<lesson>-.
+func labelled(name string, cfg container.Config) []string {
+	var bad []string
+	if cfg.Labels[LabelHarness] != "1" {
+		bad = append(bad, fmt.Sprintf("%s: label %s is %q, want 1", InvLabelled, LabelHarness, cfg.Labels[LabelHarness]))
+	}
+	lesson := cfg.Labels[LabelLesson]
+	if lesson == "" {
+		bad = append(bad, fmt.Sprintf("%s: label %s is missing or empty", InvLabelled, LabelLesson))
+	} else if !strings.HasPrefix(name, "trinkets-"+lesson+"-") {
+		bad = append(bad, fmt.Sprintf("%s: name %q does not start with trinkets-%s-", InvLabelled, name, lesson))
+	}
+	return bad
+}
+
+// swapPinned: Memory > 0 implies MemorySwap == Memory, so a memory limit is
+// not quietly doubled by swap.
+func swapPinned(hc container.HostConfig) []string {
+	if hc.Memory > 0 && hc.MemorySwap != hc.Memory {
+		return []string{fmt.Sprintf("%s: Memory %d with MemorySwap %d", InvSwapPinned, hc.Memory, hc.MemorySwap)}
+	}
+	return nil
+}
+
+// securityOptKV splits a security option the way the engine does: on the
+// first "=", or on the first ":" for the legacy spelling.
+func securityOptKV(opt string) (key, value string) {
+	if k, v, ok := strings.Cut(opt, "="); ok {
+		return k, v
+	}
+	k, v, _ := strings.Cut(opt, ":")
+	return k, v
+}
+
+// seccompInline: a seccomp= option is unconfined or a JSON object.
+func seccompInline(hc container.HostConfig) []string {
+	var bad []string
+	for _, opt := range hc.SecurityOpt {
+		if k, v := securityOptKV(opt); k == "seccomp" && v != "unconfined" && !isJSONObject(v) {
+			bad = append(bad, fmt.Sprintf("%s: seccomp option %.60q is neither unconfined nor a JSON object", InvSeccompInline, v))
+		}
+	}
+	return bad
+}
+
+// restrictedComplete: the IsRestricted conditions, as violations: non-root
+// numeric user, CapDrop contains ALL, no CapAdd, no-new-privileges, read-only
+// root, network none, private PID/IPC/cgroup namespaces, memory, CPU and PID
+// limits set.
+func restrictedComplete(cfg container.Config, hc container.HostConfig) []string {
+	var bad []string
+	add := func(format string, a ...any) {
+		bad = append(bad, fmt.Sprintf(InvRestrictedComplete+": "+format, a...))
+	}
+	uid, _, _ := strings.Cut(cfg.User, ":")
+	if !validUser(cfg.User) || strings.TrimLeft(uid, "0") == "" {
+		add("user %q is not a numeric non-root uid", cfg.User)
+	}
+	if !slices.Contains(hc.CapDrop, "ALL") {
+		add("CapDrop %v lacks ALL", hc.CapDrop)
+	}
+	if len(hc.CapAdd) > 0 {
+		add("CapAdd %v is not empty", hc.CapAdd)
+	}
+	if !slices.ContainsFunc(hc.SecurityOpt, isNoNewPrivileges) {
+		add("no-new-privileges is not set")
+	}
+	if !hc.ReadonlyRootfs {
+		add("root filesystem is writable")
+	}
+	if hc.NetworkMode != "none" {
+		add("network is %q, want none", hc.NetworkMode)
+	}
+	if hc.PidMode != "" {
+		add("PID namespace %q is shared", hc.PidMode)
+	}
+	if hc.IpcMode != container.IPCModePrivate {
+		add("IPC namespace %q is not private", hc.IpcMode)
+	}
+	if hc.CgroupnsMode != container.CgroupnsModePrivate {
+		add("cgroup namespace %q is not private", hc.CgroupnsMode)
+	}
+	if hc.Memory <= 0 || hc.NanoCPUs <= 0 || hc.PidsLimit == nil || *hc.PidsLimit <= 0 {
+		add("memory %d, CPU %d and PID limit %v must all be set", hc.Memory, hc.NanoCPUs, ptrValue(hc.PidsLimit))
+	}
+	return bad
+}
+
+func ptrValue(p *int64) any {
+	if p == nil {
+		return "unset"
+	}
+	return *p
+}
+
+// isNoNewPrivileges matches the spellings the engine accepts for it.
+func isNoNewPrivileges(opt string) bool {
+	k, v := securityOptKV(opt)
+	return k == "no-new-privileges" && (v == "" || v == "true")
+}
+
+// IsRestricted reports whether a translated container meets the restricted
+// baseline (restricted-complete). The user lives in Config, the rest in
+// HostConfig, so it takes both.
+func IsRestricted(cfg container.Config, hc container.HostConfig) bool {
+	return len(restrictedComplete(cfg, hc)) == 0
+}
+
+// CheckConfig runs every config invariant that holds for all containers the
+// harness creates (restricted-complete applies to the Restricted preset only
+// and is checked by IsRestricted). socket is the resolved daemon socket path.
+// An empty result means the request may be sent.
+func CheckConfig(req Request, socket string) []string {
+	return slices.Concat(
+		noDockerSocket(req.HostConfig, socket),
+		neverPrivileged(req.HostConfig),
+		labelled(req.Name, req.Config),
+		swapPinned(req.HostConfig),
+		seccompInline(req.HostConfig),
+	)
+}
+
+// CheckObserved is inspect-matches-intent: the security fields the engine
+// recorded for a container equal the ones in the request. Fields the request
+// leaves at zero must still read as zero, except three the engine fills in:
+// User (the image's USER), NetworkMode (bridge) and Runtime (the default
+// runtime).
+// Even then the observed value may never be host, and Privileged must be
+// false. Capabilities compare in normalized form, which is what both the
+// client and Translate send.
+func CheckObserved(got container.InspectResponse, want Request) []string {
+	var bad []string
+	add := func(format string, a ...any) {
+		bad = append(bad, fmt.Sprintf(InvInspectMatches+": "+format, a...))
+	}
+	if got.Config == nil || got.HostConfig == nil {
+		return []string{InvInspectMatches + ": inspect has no Config or HostConfig"}
+	}
+	gc, gh, wh := *got.Config, *got.HostConfig, want.HostConfig
+	if name := strings.TrimPrefix(got.Name, "/"); name != want.Name {
+		add("name %q, want %q", name, want.Name)
+	}
+	if want.Config.User != "" && gc.User != want.Config.User {
+		add("user %q, want %q", gc.User, want.Config.User)
+	}
+	for k, v := range want.Config.Labels {
+		if gc.Labels[k] != v {
+			add("label %s=%q, want %q", k, gc.Labels[k], v)
+		}
+	}
+	for _, v := range neverPrivileged(gh) {
+		add("%s", v)
+	}
+	eq := func(field string, got, want any) {
+		if !reflect.DeepEqual(got, want) {
+			add("%s %v, want %v", field, got, want)
+		}
+	}
+	eq("ReadonlyRootfs", gh.ReadonlyRootfs, wh.ReadonlyRootfs)
+	eq("CapAdd", normalizeCaps(gh.CapAdd), normalizeCaps(wh.CapAdd))
+	eq("CapDrop", normalizeCaps(gh.CapDrop), normalizeCaps(wh.CapDrop))
+	eq("SecurityOpt", emptyNil(gh.SecurityOpt), emptyNil(wh.SecurityOpt))
+	eq("GroupAdd", emptyNil(gh.GroupAdd), emptyNil(wh.GroupAdd))
+	if wh.NetworkMode != "" || (gh.NetworkMode != "bridge" && gh.NetworkMode != "default") {
+		eq("NetworkMode", gh.NetworkMode, wh.NetworkMode)
+	}
+	if wh.Runtime != "" || gh.Runtime == "" {
+		eq("Runtime", gh.Runtime, wh.Runtime)
+	}
+	eq("PidMode", gh.PidMode, wh.PidMode)
+	eq("IpcMode", gh.IpcMode, wh.IpcMode)
+	eq("CgroupnsMode", gh.CgroupnsMode, wh.CgroupnsMode)
+	eq("UTSMode", gh.UTSMode, wh.UTSMode)
+	eq("UsernsMode", gh.UsernsMode, wh.UsernsMode)
+	eq("Memory", gh.Memory, wh.Memory)
+	eq("MemorySwap", gh.MemorySwap, wh.MemorySwap)
+	eq("NanoCPUs", gh.NanoCPUs, wh.NanoCPUs)
+	eq("PidsLimit", ptrValueOr0(gh.PidsLimit), ptrValueOr0(wh.PidsLimit))
+	eq("Binds", emptyNil(gh.Binds), emptyNil(wh.Binds))
+	eq("Mounts", mountKeys(gh.Mounts), mountKeys(wh.Mounts))
+	return bad
+}
+
+func emptyNil(s []string) []string {
+	if len(s) == 0 {
+		return nil
+	}
+	return s
+}
+
+func ptrValueOr0(p *int64) int64 {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+// mountKeys is the security-relevant part of each mount, in order.
+func mountKeys(ms []mount.Mount) []string {
+	var out []string
+	for _, m := range ms {
+		var size int64
+		if m.TmpfsOptions != nil {
+			size = m.TmpfsOptions.SizeBytes
+		}
+		out = append(out, fmt.Sprintf("%s %q -> %q ro=%t size=%d", m.Type, m.Source, m.Target, m.ReadOnly, size))
+	}
+	return out
+}
+
+// noLeak words the no-leak violations for objects still carrying a lesson
+// label after its handles were removed or Sweep ran.
+func noLeak(lesson string, left Leftovers) []string {
+	var bad []string
+	for _, kind := range []struct {
+		kind  string
+		names []string
+	}{{"container", left.Containers}, {"volume", left.Volumes}, {"network", left.Networks}} {
+		for _, n := range kind.names {
+			bad = append(bad, fmt.Sprintf("%s: %s %s still carries %s=%s", InvNoLeak, kind.kind, n, LabelLesson, lesson))
+		}
 	}
 	return bad
 }
