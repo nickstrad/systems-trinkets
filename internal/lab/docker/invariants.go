@@ -310,6 +310,32 @@ func mountKeys(ms []mount.Mount) []string {
 	return out
 }
 
+// Egress topology invariants (H6). CheckWorkerHasNoRoute and
+// CheckBlockedFixtureUntouched read the facts from the running containers and
+// apply these.
+const (
+	InvWorkerHasNoRoute        = "worker-has-no-route"
+	InvBlockedFixtureUntouched = "blocked-fixture-untouched"
+)
+
+// workerHasNoRoute: the worker's only network interface is lo, so no
+// address, gateway or name it tries can be routed anywhere; the socket
+// volume is its only way out.
+func workerHasNoRoute(interfaces []string) []string {
+	if len(interfaces) == 1 && interfaces[0] == "lo" {
+		return nil
+	}
+	return []string{fmt.Sprintf("%s: interfaces %q, want only lo", InvWorkerHasNoRoute, interfaces)}
+}
+
+// blockedFixtureUntouched: the blocked fixture counted no request.
+func blockedFixtureUntouched(requests int) []string {
+	if requests == 0 {
+		return nil
+	}
+	return []string{fmt.Sprintf("%s: the blocked fixture counted %d requests, want 0", InvBlockedFixtureUntouched, requests)}
+}
+
 // noLeak words the no-leak violations for objects still carrying a lesson
 // label after its handles were removed or Sweep ran.
 func noLeak(lesson string, left Leftovers) []string {

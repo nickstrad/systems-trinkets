@@ -268,7 +268,8 @@ internal/lab/docker/
   run.go           Create, Start, Wait, Logs, Exec, Stop, Remove, Run
   invariants.go    named config and observed-state invariants, CheckConfig, CheckObserved
   cleanup.go       Sweep(ctx, cli, lesson), labels
-  topology.go      SocketVolume (H5), FixtureNetwork (H6)
+  topology.go      SocketVolume (H5)
+  egress.go        FixtureNetwork, CheckWorkerHasNoRoute, CheckBlockedFixtureUntouched (H6)
   probe/           package main (linux only): the harness's own fixture binary
   probeout/        probe line format: Parse, Format, Find (stdlib only)
   *_test.go        TestSpec_*, TestProp_*, Fuzz*; daemon tests gated by TRINKETS_DOCKER=1
@@ -541,13 +542,21 @@ services, and evidence that no other path exists. Depends on H5.
   and host are still reachable from the broker;
   [mac-portability.md](../../knowledge/mac-portability.md) notes that Docker
   internal networks still allow gateway/host communication, which is why the
-  worker gets no network at all instead of an internal one.
+  worker gets no network at all instead of an internal one. Result (H6,
+  Linux Engine 29.7.2): the network ships `Internal: true`. From a container
+  on it, the gateway address (the host's bridge IP) still reached a host
+  service listening on all addresses (sshd on port 22); the docker0 and
+  public host addresses and the internet were unreachable (no default
+  route), and outside names did not resolve. See
+  [docker-harness.md](../../knowledge/docker-harness.md).
 - A minimal forwarder fixture (one fixed destination, no redirects) proves
-  the path works. Destination grants and redirect rechecks come from the
+  the path works. It is the probe's `forward` subcommand, a byte-for-byte
+  copy that never parses the request; fixture counts are read with the
+  probe's `http-get` from inside each fixture, so no host route is needed. Destination grants and redirect rechecks come from the
   learner's `worker-egress-grants` core when `enforced-egress-path` is built;
   the harness does not pre-empt them. (projects.md words this chunk as a
   broker that "enforces destination and redirect policy"; this plan moves
-  that policy to the lesson and should update the wording when H6 lands.)
+  that policy to the lesson, and H6 updated that sentence.)
 - Bypass probes from the worker, each expected to reach nothing: the blocked
   fixture's container IP, the allowed fixture's IP directly, the network
   gateway, `host.docker.internal`, alternate ports, a DNS lookup, and

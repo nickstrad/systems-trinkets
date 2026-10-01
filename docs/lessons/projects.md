@@ -70,8 +70,9 @@ their rows stay `no` until its Mac gate passes.
   volume, with UID-changing capabilities removed and a check that UID mapping
   matches the broker ACL. Unblocks `peer-authenticated-tool-broker`.
 - **Unix-socket egress broker.** The same socket volume plus a broker service
-  that alone has network access to fixture services and enforces destination
-  and redirect policy; workers run with `network_mode: none`. Unblocks
+  that alone has network access to fixture services; the destination and
+  redirect policy it enforces is the lesson's (`worker-egress-grants`), not
+  the harness's. Workers run with `network_mode: none`. Unblocks
   `enforced-egress-path`. Depends on the peer-identity harness.
 
 ## Durable approval-based automation service
