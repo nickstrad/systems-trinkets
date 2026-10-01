@@ -165,3 +165,12 @@ H2 (2026-10-01, Linux amd64, Engine 29.7.2, containerd image store):
 - Still unverified on Docker Desktop: the classic `ImageBuild` path, the
   saved-image layout, `arm64` cross-compilation running (it builds and is
   checked as an arm64 ELF, but not executed), and every probe row (Mac gate).
+
+## Deferred work (2026-10-01)
+
+H5 (Unix peer-identity) and H6 (Unix-socket egress) of the plan are specified
+but not built; the user deferred them until a lesson needs them. The triggers
+are planning `peer-authenticated-tool-broker` (H5) and `enforced-egress-path`
+(H5 then H6). Their catalog rows, idea entries and the projects.md
+prerequisites all point at the plan, so a blocked `$create-lesson` names the
+work item to build.

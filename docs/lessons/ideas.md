@@ -468,7 +468,9 @@ Research: [Daytona](../agentic-platforms/daytona.md),
   method or credential scope.
 - Measure: unauthorized accepts; ACL denials; dispatch ms.
 - Software: Go; Docker Unix peer-identity harness. Blocked: harness
-  unconfigured; broker and sockets stay inside Docker Linux.
+  unconfigured; broker and sockets stay inside Docker Linux. To unblock,
+  build deferred work item H5 in
+  [the harness plan](../plans/docker-harness-prereqs.md).
 - Options: Go `SO_PEERCRED` broker and fixed-UID workers as Compose services
   sharing a socket volume with `cap_drop` (setup: catalog row `Docker Unix
   peer-identity harness` is `no`; Compose can host it, the missing piece is
@@ -589,6 +591,8 @@ Research: [Daytona](../agentic-platforms/daytona.md),
 - Measure: bypass successes; blocked requests; broker overhead ms.
 - Software: Go; Docker isolation harness and Unix-socket egress broker.
   Blocked: harnesses unconfigured. Narrow actions, not a transparent proxy.
+  To unblock, build deferred work items H5 then H6 in
+  [the harness plan](../plans/docker-harness-prereqs.md).
 - Options: Compose worker with `network_mode: none` plus a broker service on
   a shared socket volume (setup: catalog rows `Docker isolation harness` and
   `Unix-socket egress broker` are `no`; Compose can host both) · Toxiproxy as
