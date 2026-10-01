@@ -1,22 +1,8 @@
 # Plan: shared Docker harness prerequisites
 
-Status: **H1–H4 in implementation; H5 and H6 deferred** (plan written
-2026-09-30; the user asked for AI implementation the same day). Catalog rows
-stay `no` until the Mac gate (H7) passes; see D4.
-
-> **Deferred on 2026-10-01: H5 and H6 are not built.** They are specified
-> below and wait for the lesson that needs them.
->
-> - Build **H5** when you want to plan `peer-authenticated-tool-broker`.
-> - Build **H6** (needs H5 first) when you want to plan
->   `enforced-egress-path`.
-> - Both are step 3 of "Lessons needed" for the Focused personal agent
->   computer in [projects.md](../lessons/projects.md).
->
-> You will be reminded at the point of need: `$create-lesson` refuses either
-> idea because its catalog row is `no`, and that row, the idea entry and the
-> projects.md prerequisite each name the work item here. To start, ask for
-> "H5 from docs/plans/docker-harness-prereqs.md" (or H6).
+Status: **H1–H6 in implementation** (plan written 2026-09-30; the user asked
+for AI implementation the same day). Catalog rows stay `no` until the Mac gate
+(H7) passes; see D4.
 
 This plans the three Docker chunks under "Shared prerequisites" in
 [projects.md](../lessons/projects.md): the Go Docker client and isolation
@@ -503,9 +489,7 @@ Done when: `make check`, `make test`, `make fuzz`, `make check-docker` and
 `make clean-harness` pass; `make ps` still lists only backing services; no
 catalog row or idea label has changed before the Mac gate.
 
-### H5. Unix peer-identity harness (deferred)
-
-Not built. Trigger: planning `peer-authenticated-tool-broker`.
+### H5. Unix peer-identity harness
 
 Goal: a topology in which a broker can trust the kernel-supplied UID of each
 worker, plus a check that the UID it sees is the UID that was assigned.
@@ -543,9 +527,7 @@ Done when (gated tests):
   `peer-authenticated-tool-broker` and the Focused personal agent computer
   notes.
 
-### H6. Unix-socket egress topology (deferred)
-
-Not built. Trigger: planning `enforced-egress-path`; build H5 first.
+### H6. Unix-socket egress topology
 
 Goal: a worker with no network, a broker that alone can reach fixture
 services, and evidence that no other path exists. Depends on H5.

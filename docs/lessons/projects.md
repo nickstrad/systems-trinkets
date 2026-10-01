@@ -69,13 +69,10 @@ their rows stay `no` until its Mac gate passes.
   fixed-UID Go workers sharing a dedicated socket directory on a named
   volume, with UID-changing capabilities removed and a check that UID mapping
   matches the broker ACL. Unblocks `peer-authenticated-tool-broker`.
-  Deferred: specified as work item H5 in the plan above and built when that
-  lesson is next.
 - **Unix-socket egress broker.** The same socket volume plus a broker service
   that alone has network access to fixture services and enforces destination
   and redirect policy; workers run with `network_mode: none`. Unblocks
-  `enforced-egress-path`. Depends on the peer-identity harness. Deferred:
-  work item H6 in the plan above, built after H5 when that lesson is next.
+  `enforced-egress-path`. Depends on the peer-identity harness.
 
 ## Durable approval-based automation service
 
@@ -401,9 +398,7 @@ make the downstream effect atomic with recording completion.
    must hide before building the cell.
 3. After the shared Docker, peer-identity and egress prerequisites:
    `worker-capabilities`, `focused-runtime-cell`,
-   `peer-authenticated-tool-broker` and `enforced-egress-path`. The last two
-   need deferred work items H5 and H6 of
-   [the harness plan](../plans/docker-harness-prereqs.md) built first.
+   `peer-authenticated-tool-broker` and `enforced-egress-path`.
 
 ### Follow-up lessons
 
