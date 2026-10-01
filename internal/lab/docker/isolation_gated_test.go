@@ -287,7 +287,8 @@ func TestSpec_H4_GatedOOMKilledAtMemoryLimit(t *testing.T) {
 
 // TestSpec_H4_GatedForkLoopStopsAtPidsLimit: PidsLimit counts threads, and
 // every Go child has several, so the loop stops well below PidsLimit
-// children; the point is that it stops with a fork error.
+// children. It must stop with EAGAIN, the pids cgroup's answer, not ENOMEM or
+// anything else; a control with a higher limit forks without trouble.
 func TestSpec_H4_GatedForkLoopStopsAtPidsLimit(t *testing.T) {
 	ctx, cli := gatedClient(t)
 	img := probeImage(t, ctx, cli)
@@ -302,10 +303,26 @@ func TestSpec_H4_GatedForkLoopStopsAtPidsLimit(t *testing.T) {
 	if !found || !started.OK || err != nil || n < 1 || n >= RestrictedPidsLimit {
 		t.Errorf("fork-started = %+v, want a count in 1..%d", started, RestrictedPidsLimit-1)
 	}
-	if l, found := probeout.Find(lines, "fork"); !found || l.OK {
-		t.Errorf("fork line = %+v, want DENIED", l)
+	if problem := wantDenied(`resource temporarily unavailable`).check(lineOf(lines, "fork")); problem != "" {
+		t.Errorf("fork line: %s", problem)
 	}
 	t.Logf("%d children started under PidsLimit %d", n, RestrictedPidsLimit)
+
+	// Control: the same spec with room for the children runs them all.
+	ctl := Restricted(lesson, "control", img, "fork", "20")
+	ctl.PidsLimit = 512
+	ctl.Memory = 256 << 20 // twenty sleeping copies of the probe must not hit the 64 MiB limit instead
+	res, lines = runLines(t, ctx, cli, ctl)
+	if started, _ := probeout.Find(lines, "fork-started"); res.ExitCode != 0 || started.Detail != "20" || res.OOMKilled {
+		t.Errorf("fork 20 under PidsLimit 512: exit %d OOMKilled %v lines %q, want 0 and 20 children", res.ExitCode, res.OOMKilled, probeout.Format(lines))
+	}
+}
+
+// lineOf returns the named line; a missing one is a zero Line, which fails any
+// want that needs a particular answer.
+func lineOf(lines []probeout.Line, name string) probeout.Line {
+	l, _ := probeout.Find(lines, name)
+	return l
 }
 
 // TestSpec_H4_GatedCgroupFilesReadableInside: the container reads its own

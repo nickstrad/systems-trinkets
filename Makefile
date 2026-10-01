@@ -111,7 +111,7 @@ clean-harness:
 	ids=$$(docker ps -aq --filter $$l); [ -z "$$ids" ] || docker rm -f $$ids >/dev/null; \
 	ids=$$(docker network ls -q --filter $$l); [ -z "$$ids" ] || docker network rm $$ids >/dev/null; \
 	ids=$$(docker volume ls -q --filter $$l); [ -z "$$ids" ] || docker volume rm -f $$ids >/dev/null; \
-	ids=$$(docker image ls -aq --filter $$l | sort -u); [ -z "$$ids" ] || docker rmi -f $$ids >/dev/null; \
+	ids=$$(docker image ls -aq --filter $$l); [ -z "$$ids" ] || docker rmi -f $$ids >/dev/null; \
 	echo "harness objects removed"
 
 ps:

@@ -267,7 +267,9 @@ H4 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
   with `OOMKilled` true and exit 137; 16 MiB exits 0 and not killed. Both
   came back through `Run`'s `Result` with no extra code.
 - **Fork loop.** `fork 200` under `PidsLimit` 64 started 14 children then got
-  a fork error (threads count, so far under 64).
+  a fork error that must read `resource temporarily unavailable` (EAGAIN from
+  the pids cgroup; threads count, so far under 64). A control with `PidsLimit`
+  512 and 256 MiB forks 20 children cleanly.
 - **cgroup files** `memory.max`, `pids.max`, `cpu.max` read as `67108864`,
   `64`, `50000 100000` from inside; `RestrictedNanoCPUs` 0.5 CPU is `50000`
   of a `100000` period.
@@ -275,14 +277,17 @@ H4 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
   with `label=trinkets.harness=1` through docker CLI filters (an empty `ids`
   skips each step, so a clean daemon succeeds; no `xargs -r`, which BSD
   `xargs` on macOS lacks). It touches no compose service (they carry no
-  harness label). **Not yet executed**: other items shared the daemon while it
-  was written, so only `make -n clean-harness` and its recipe with the label swapped for a
-  value nothing carries (every step takes the empty branch and exits 0) were run. Never run it while
-  another work item shares the daemon.
+  harness label). The author did not run it (other items shared the daemon). The reviewer ran
+  the recipe with the label swapped to a throwaway value, under `dash` and
+  `bash --posix`, covering a container using a network and a volume, an image
+  ID with two tags, an image in use and an empty-label rerun; everything was
+  removed and both runs exited 0. Never run it while another work item shares
+  the daemon.
 - **Tests that read repo files** (`repo_test.go`, no daemon): `make help` lists
   `clean-harness`, and `software/software.md` still says `no` for `Docker
-  Engine API`, `Docker isolation harness` and `cgroups v2` (the flip waits for
-  the Mac gate). Gated tests take their lesson label from `sweptLesson`
+  Engine API`, `Docker isolation harness` and `cgroups v2`, and the six
+  H1-H4 ideas keep their Blocked/Ready wording in `ideas.md` (the flip waits
+  for the Mac gate). Gated tests take their lesson label from `sweptLesson`
   (`h4-<name>-<random>`); `testLesson` is the `h3-` wrapper.
 - **Full-package timing here**: `make check-docker` about 83 s; `make fuzz`
   about 97 s with the 10 s default per target.
