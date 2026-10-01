@@ -46,3 +46,6 @@ go.work.sum
 
 # vim swap files
 *.swp
+
+# rapid failure files; keep a failing case as a fuzz seed or spec test instead
+**/testdata/rapid/

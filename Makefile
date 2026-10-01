@@ -13,6 +13,9 @@
 #   make logs-<service>   follow logs
 #   make ps               show running trinkets services
 #   make check            compile-check every lesson: go vet ./... and deno check
+#   make test             go test ./...: spec and property tests, fuzz seeds; no daemon
+#   make fuzz             run every Fuzz target for FUZZTIME (default 10s) each
+#   make check-docker     Docker harness tests that need a daemon (TRINKETS_DOCKER=1)
 #
 # Services: postgres, redis, valkey, seaweedfs, nats, etcd, registry, toxiproxy, temporal, openbao, pgbouncer (see software/software.md)
 
@@ -33,7 +36,9 @@ compose_file_pgbouncer := software/pgbouncer.compose.yaml
 
 compose = docker compose -f $(compose_file_$(1))
 
-.PHONY: help ps check
+FUZZTIME     ?= 10s
+
+.PHONY: help ps check test fuzz check-docker
 
 help:
 	@sed -n 's/^#   /  /p' Makefile
@@ -78,6 +83,24 @@ $(foreach p,$(PERF_LESSONS),$(eval $(call perf_rules,$(p),$(notdir $(p)))))
 check:
 	go vet ./...
 	deno check .
+
+test:
+	go test ./...
+
+# go test -fuzz takes exactly one target in one package, so list every
+# Fuzz target and run them one at a time. The first failure stops the loop;
+# a failing input lands in testdata/fuzz/<Target>/ and should be committed.
+fuzz:
+	@set -e; pkgs=$$(go list ./...) || exit 1; for pkg in $$pkgs; do \
+		out=$$(go test -list '^Fuzz' $$pkg) || { echo "$$out"; exit 1; }; \
+		for t in $$(echo "$$out" | grep '^Fuzz' || true); do \
+			echo "fuzz $$pkg $$t ($(FUZZTIME))"; \
+			go test -run '^$$' -fuzz "^$$t\$$" -fuzztime $(FUZZTIME) $$pkg; \
+		done; \
+	done
+
+check-docker:
+	TRINKETS_DOCKER=1 go test -count=1 ./internal/lab/docker/...
 
 ps:
 	@docker ps --filter "label=com.docker.compose.project" --format '{{.Label "com.docker.compose.project"}}\t{{.Status}}\t{{.Ports}}' | grep '^trinkets-' || echo "no trinkets services running"
