@@ -474,9 +474,9 @@ func genPath(t *rapid.T, label string) (string, bool) {
 
 func genID(t *rapid.T, label string) (int, bool) {
 	if rapid.IntRange(0, 9).Draw(t, label+" breakage") == 0 {
-		return rapid.SampledFrom([]int{-1, 4294967295, 1 << 40}).Draw(t, label+" bad"), false
+		return rapid.SampledFrom([]int{-1, 2147483648, 4294967295, 1 << 40}).Draw(t, label+" bad"), false
 	}
-	return rapid.SampledFrom([]int{0, 1, 999, 10001, 20000, 4294967294}).Draw(t, label), true
+	return rapid.SampledFrom([]int{0, 1, 999, 10001, 20000, 2147483647}).Draw(t, label), true
 }
 
 // genImage draws a description and whether it is valid, from known-good
@@ -504,9 +504,9 @@ func genImage(t *rapid.T) (FixtureImage, bool) {
 		pkg = rapid.SampledFrom([]string{"", "-race", "-o=/tmp/x"}).Draw(t, "bad package")
 		valid = false
 	}
-	user := rapid.SampledFrom([]string{"", "", "0:0", "10001:10001", "20000:30000", "4294967294:4294967294"}).Draw(t, "user")
+	user := rapid.SampledFrom([]string{"", "", "0:0", "10001:10001", "20000:30000", "2147483647:2147483647"}).Draw(t, "user")
 	if rapid.IntRange(0, 14).Draw(t, "user breakage") == 0 {
-		user = rapid.SampledFrom([]string{"root", "1", "1:", ":1", "-1:1", "1:-1", "1:2:3", "a:b", "1: 2", "+1:1", "0x1:1", "4294967295:1", "1:4294967295", "99999999999999999999:1", "1:1\nUSER 0"}).Draw(t, "bad user")
+		user = rapid.SampledFrom([]string{"root", "1", "1:", ":1", "-1:1", "1:-1", "1:2:3", "a:b", "1: 2", "+1:1", "0x1:1", "4294967295:1", "1:4294967295", "2147483648:1", "1:2147483648", "99999999999999999999:1", "1:1\nUSER 0"}).Draw(t, "bad user")
 		valid = false
 	}
 	img := FixtureImage{Lesson: lesson, Tag: tag, Package: pkg, User: user}

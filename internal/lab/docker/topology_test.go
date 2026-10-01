@@ -1,7 +1,10 @@
 package docker
 
 import (
+	"fmt"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -110,6 +113,41 @@ func TestParsePeerCred(t *testing.T) {
 	}
 }
 
+// peerCredRE is the oracle for FuzzParsePeerCred: the texts fmt's %d writes
+// for an int (no sign on zero, no leading zeros, no plus), three times.
+var peerCredRE = regexp.MustCompile(`^uid=(0|-?[1-9][0-9]*) gid=(0|-?[1-9][0-9]*) pid=(0|-?[1-9][0-9]*)$`)
+
+// FuzzParsePeerCred: parsePeerCred accepts s exactly when s is what
+// formatting three ints gives back ("uid=U gid=G pid=P"), and then returns
+// those ints.
+func FuzzParsePeerCred(f *testing.F) {
+	for _, s := range []string{
+		"uid=20001 gid=20001 pid=0", "uid=0 gid=0 pid=0", "uid=-1 gid=2 pid=3", "uid=+1 gid=2 pid=3",
+		"uid=01 gid=2 pid=3", "uid=1 gid=2", "uid=1 gid=2 pid=3 ", "uid=1  gid=2 pid=3", "uid=-0 gid=0 pid=0",
+		"uid=99999999999999999999 gid=0 pid=0", "uid=1 gid=2 pid=3\n", "",
+	} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		uid, gid, pid, err := parsePeerCred(s)
+		m := peerCredRE.FindStringSubmatch(s)
+		want := m != nil
+		var n [3]int
+		for i := range n {
+			if want {
+				v, aerr := strconv.Atoi(m[i+1])
+				want, n[i] = aerr == nil, v // out of int range does not round-trip
+			}
+		}
+		if got := err == nil; got != want {
+			t.Fatalf("parsePeerCred(%q) accepted=%v, the format says %v (err %v)", s, got, want, err)
+		}
+		if err == nil && (uid != n[0] || gid != n[1] || pid != n[2] || fmt.Sprintf("uid=%d gid=%d pid=%d", uid, gid, pid) != s) {
+			t.Fatalf("parsePeerCred(%q) = %d %d %d", s, uid, gid, pid)
+		}
+	})
+}
+
 func TestPeerIdentitiesMustBeDistinctAndNonZero(t *testing.T) {
 	if err := DefaultPeerIdentities.validate(); err != nil {
 		t.Fatal(err)
@@ -118,7 +156,7 @@ func TestPeerIdentitiesMustBeDistinctAndNonZero(t *testing.T) {
 		func(p *PeerIdentities) { p.Outsider = p.SocketGID }, // its primary group would be the socket group
 		func(p *PeerIdentities) { p.Workers[1] = p.Workers[0] },
 		func(p *PeerIdentities) { p.Workers[0] = 0 },
-		func(p *PeerIdentities) { p.BrokerUID = maxEngineID + 1 },
+		func(p *PeerIdentities) { p.BrokerUID = maxID + 1 },
 		func(p *PeerIdentities) { p.SocketGID = -1 },
 	} {
 		p := DefaultPeerIdentities

@@ -84,8 +84,11 @@ var (
 	userRE   = regexp.MustCompile(`^[0-9]+:[0-9]+$`)
 )
 
-// maxID is the largest valid uid or gid: 4294967295 is (uid_t)-1.
-const maxID = 4294967294
+// maxID is the largest uid or gid the engine starts a container with. The
+// kernel allows up to 4294967294 ((uid_t)-1 is 4294967295), but a larger User
+// or GroupAdd passes create and fails at start with "uids and gids must be in
+// range 0-2147483647", so Translate and FixtureImage refuse it up front.
+const maxID = 1<<31 - 1
 
 func validID(n int64) bool { return n >= 0 && n <= maxID }
 

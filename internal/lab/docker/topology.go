@@ -31,13 +31,6 @@ const ProbePackage = "github.com/nickstrad/systems-trinkets/internal/lab/docker/
 // entries take the socket group.
 const socketDirMode = "2750"
 
-// maxEngineID is the largest uid or gid the engine starts a container with:
-// a larger User or GroupAdd passes create and fails at start with "uids and
-// gids must be in range 0-2147483647" (validID allows up to 2^32-2).
-const maxEngineID = 1<<31 - 1
-
-func validEngineID(n int) bool { return n >= 0 && n <= maxEngineID }
-
 // lineTimeout bounds WaitLine when the caller's context has no sooner deadline.
 const lineTimeout = 30 * time.Second
 
@@ -71,7 +64,7 @@ func SocketVolume(ctx context.Context, cli *client.Client, lesson string, broker
 // socketVolume is SocketVolume with the probe image given, so a caller that
 // already has one does not build it again.
 func socketVolume(ctx context.Context, cli *client.Client, lesson, image string, brokerUID, socketGID int) (broker, worker Mount, err error) {
-	if !validEngineID(brokerUID) || !validEngineID(socketGID) {
+	if !validID(int64(brokerUID)) || !validID(int64(socketGID)) {
 		return Mount{}, Mount{}, fmt.Errorf("docker: socket volume owner %d:%d is out of range", brokerUID, socketGID)
 	}
 	name, err := CreateVolume(ctx, cli, lesson, "sock")
@@ -156,8 +149,8 @@ func (p PeerIdentities) validate() error {
 	ids := []int{p.BrokerUID, p.SocketGID, p.Workers[0], p.Workers[1], p.Outsider}
 	seen := map[int]bool{}
 	for _, id := range ids {
-		if id == 0 || !validEngineID(id) || seen[id] {
-			return fmt.Errorf("docker: peer identities %+v must be distinct, non-zero and at most %d", p, maxEngineID)
+		if id == 0 || !validID(int64(id)) || seen[id] {
+			return fmt.Errorf("docker: peer identities %+v must be distinct, non-zero and at most %d", p, maxID)
 		}
 		seen[id] = true
 	}

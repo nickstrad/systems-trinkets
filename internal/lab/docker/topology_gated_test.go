@@ -293,7 +293,7 @@ func TestProp_PeerUID(t *testing.T) {
 	lesson := sweptLesson(t, cli, "h5-peeruid")
 	capRapid(t, 3, 1)
 	rapid.Check(t, func(t *rapid.T) {
-		n := rapid.SliceOfNDistinct(rapid.IntRange(1, maxEngineID), 5, 5, rapid.ID[int]).Draw(t, "ids")
+		n := rapid.SliceOfNDistinct(rapid.IntRange(1, maxID), 5, 5, rapid.ID[int]).Draw(t, "ids")
 		ids := PeerIdentities{BrokerUID: n[0], SocketGID: n[1], Workers: [2]int{n[2], n[3]}, Outsider: n[4]}
 		dials, err := verifyPeerIdentity(ctx, cli, lesson, img, ids)
 		if err != nil {

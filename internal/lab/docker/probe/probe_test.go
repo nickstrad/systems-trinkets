@@ -341,3 +341,35 @@ func TestSleepIgnoreTermSurvivesSIGTERM(t *testing.T) {
 		t.Errorf("did not sleep to the end: %q", out.String())
 	}
 }
+
+// TestReplaceSwapsThePathForANewSocket is the positive control for replace:
+// where the caller may write the directory, the path ends up a different
+// inode, a socket, and the temporary name is gone. It acts only inside a temp
+// dir.
+func TestReplaceSwapsThePathForANewSocket(t *testing.T) {
+	t.Setenv(markerEnv, "1")
+	dir := t.TempDir()
+	target := filepath.Join(dir, "broker.sock")
+	if err := os.WriteFile(target, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var before syscall.Stat_t
+	if err := syscall.Lstat(target, &before); err != nil {
+		t.Fatal(err)
+	}
+	code, lines := probe(t, "replace", target)
+	if code != 0 {
+		t.Errorf("replace = %d", code)
+	}
+	wantLine(t, lines, "replace", true)
+	var after syscall.Stat_t
+	if err := syscall.Lstat(target, &after); err != nil {
+		t.Fatal(err)
+	}
+	if after.Ino == before.Ino || after.Mode&syscall.S_IFMT != syscall.S_IFSOCK {
+		t.Errorf("inode %d -> %d, mode %o: want a new socket at %s", before.Ino, after.Ino, after.Mode, target)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 {
+		t.Errorf("%d entries left in the temp dir, want only the replaced path", len(entries))
+	}
+}

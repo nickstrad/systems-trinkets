@@ -292,13 +292,17 @@ H5 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
   before answering.
 - **The engine caps UIDs at 2^31-1.** `User` or `GroupAdd` above
   `2147483647` passes create and fails at start: `uids and gids must be in
-  range 0-2147483647`. `Translate` accepts up to `4294967294`, so that gap
-  is still open in the launcher; `PeerIdentities` and `SocketVolume` check
-  the engine limit.
+  range 0-2147483647`, although the kernel allows up to `4294967294`.
+  `maxID` is now `2^31-1`, so `Translate` (User, Groups), `FixtureImage`
+  (User, owned dirs), `PeerIdentities` and `SocketVolume` all refuse a
+  larger ID before anything is created.
 - **Tests.** `TestProp_PeerUID` draws five distinct identities in
   `1..2^31-1` and runs the whole verification; capped at 3 cases (about
   12 s). Planting `s.User = RestrictedUser` in `WorkerSpec` made it fail on
-  the first case. Gated tests use `h5-` lesson labels and check that
+  the first case. `FuzzParsePeerCred` checks the reply parser against a
+  regexp oracle (accepted exactly when the text is what `%d` formatting
+  gives back); dropping the round-trip guard failed on the `uid=+1` seed.
+  Gated tests use `h5-` lesson labels and check that
   `SocketVolume` and `VerifyPeerIdentity` leave no image behind.
 - Still unverified on Docker Desktop: everything above, in particular
   `SO_PEERCRED` UIDs with Enhanced Container Isolation (which remaps
