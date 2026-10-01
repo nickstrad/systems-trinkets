@@ -12,7 +12,7 @@
 // refuses to run.
 //
 // Guard: commands that change the machine (write, setuid, chown, chmod,
-// unlink, mount, unshare-user, keyctl, battery, alloc, fork, initdir) refuse
+// unlink, replace, mount, unshare-user, keyctl, battery, alloc, fork, initdir) refuse
 // to run unless TRINKETS_PROBE=1 is in the environment. BuildFixture bakes
 // that variable into every fixture image, so inside a harness container it is
 // always set, and running this binary by hand on a host (a stray go run, a
@@ -93,6 +93,7 @@ func init() {
 		{name: "chown", mutates: true, args: "<path> <uid:gid>", doc: "chown path", fn: cmdChown},
 		{name: "chmod", mutates: true, args: "<path> <octal>", doc: "chmod path, setgid and sticky bits included", fn: cmdChmod},
 		{name: "unlink", mutates: true, args: "<path>", doc: "unlink path", fn: cmdUnlink},
+		{name: "replace", mutates: true, args: "<path>", doc: "bind a unix socket beside path and rename it over path", fn: cmdReplace},
 		{name: "stat", args: "<path>", doc: "mode, owner and group of path (no symlink follow)", fn: cmdStat},
 		{name: "mount", mutates: true, doc: "mount a tmpfs on /dev/shm, then unmount it", fn: cmdMount},
 		{name: "unshare-user", mutates: true, doc: "start a child in a new user namespace (clone, not unshare: a Go process is multi-threaded)", fn: cmdUnshareUser},

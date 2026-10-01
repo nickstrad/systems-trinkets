@@ -107,7 +107,7 @@ func TestMutatingCommandsRefuseWithoutMarker(t *testing.T) {
 	owner := fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid())
 	for _, args := range [][]string{
 		{"write", dir}, {"chmod", file, "0644"}, {"chown", file, owner},
-		{"unlink", file}, {"initdir", dir, owner, "0755"}, {"alloc", "1"},
+		{"unlink", file}, {"replace", file}, {"initdir", dir, owner, "0755"}, {"alloc", "1"},
 	} {
 		var out, errOut bytes.Buffer
 		if code := run(args, &out, &errOut); code != 3 {
@@ -127,7 +127,7 @@ func TestMutatingCommandsRefuseWithoutMarker(t *testing.T) {
 
 func TestWhichCommandsAreGuarded(t *testing.T) {
 	want := map[string]bool{
-		"write": true, "setuid": true, "chown": true, "chmod": true, "unlink": true, "mount": true,
+		"write": true, "setuid": true, "chown": true, "chmod": true, "unlink": true, "replace": true, "mount": true,
 		"unshare-user": true, "keyctl": true, "battery": true, "alloc": true, "fork": true, "initdir": true,
 	}
 	for _, c := range commands {
@@ -339,5 +339,37 @@ func TestSleepIgnoreTermSurvivesSIGTERM(t *testing.T) {
 	}
 	if last := lines[len(lines)-1]; last.Name != "sleep" || last.Detail != "done" {
 		t.Errorf("did not sleep to the end: %q", out.String())
+	}
+}
+
+// TestReplaceSwapsThePathForANewSocket is the positive control for replace:
+// where the caller may write the directory, the path ends up a different
+// inode, a socket, and the temporary name is gone. It acts only inside a temp
+// dir.
+func TestReplaceSwapsThePathForANewSocket(t *testing.T) {
+	t.Setenv(markerEnv, "1")
+	dir := t.TempDir()
+	target := filepath.Join(dir, "broker.sock")
+	if err := os.WriteFile(target, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var before syscall.Stat_t
+	if err := syscall.Lstat(target, &before); err != nil {
+		t.Fatal(err)
+	}
+	code, lines := probe(t, "replace", target)
+	if code != 0 {
+		t.Errorf("replace = %d", code)
+	}
+	wantLine(t, lines, "replace", true)
+	var after syscall.Stat_t
+	if err := syscall.Lstat(target, &after); err != nil {
+		t.Fatal(err)
+	}
+	if after.Ino == before.Ino || after.Mode&syscall.S_IFMT != syscall.S_IFSOCK {
+		t.Errorf("inode %d -> %d, mode %o: want a new socket at %s", before.Ino, after.Ino, after.Mode, target)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 {
+		t.Errorf("%d entries left in the temp dir, want only the replaced path", len(entries))
 	}
 }

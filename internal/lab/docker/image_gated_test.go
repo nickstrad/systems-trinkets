@@ -411,7 +411,7 @@ func TestSpec_H2_GatedOwnedDirsKeepPathAndOwner(t *testing.T) {
 		{"/.hidden", 9, 10},
 		{"/m-n/o+p/q@r", 11, 12},
 		{"/dots..in", 13, 14},
-		{"/deep/er/est", 4294967294, 4294967294},
+		{"/deep/er/est", 2147483647, 2147483647}, // maxID
 	}
 	img := buildProbeImage(t, ctx, cli, dirs...)
 	files := imageLayerFiles(t, ctx, cli, img.Tag)

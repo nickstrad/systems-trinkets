@@ -10,6 +10,8 @@ import (
 
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
+
+	"github.com/nickstrad/systems-trinkets/internal/lab/docker/probeout"
 )
 
 // Named invariants. Each is a small function that returns the violations it
@@ -308,6 +310,83 @@ func mountKeys(ms []mount.Mount) []string {
 		out = append(out, fmt.Sprintf("%s %q -> %q ro=%t size=%d", m.Type, m.Source, m.Target, m.ReadOnly, size))
 	}
 	return out
+}
+
+// Peer-identity invariants (H5). VerifyPeerIdentity checks both on every run
+// and fails when either is violated.
+const (
+	InvPeerUIDIsAssignedUID    = "peer-uid-is-assigned-uid"
+	InvSocketGroupGatesConnect = "socket-group-gates-connect"
+)
+
+// parsePeerCred reads peer-echo's report, "uid=U gid=G pid=P". The match is
+// exact: the text must be what formatting the three numbers gives back, so
+// "uid=+5" or trailing text is malformed rather than read loosely.
+func parsePeerCred(s string) (uid, gid, pid int, err error) {
+	const format = "uid=%d gid=%d pid=%d"
+	if _, err := fmt.Sscanf(s, format, &uid, &gid, &pid); err != nil || fmt.Sprintf(format, uid, gid, pid) != s {
+		return 0, 0, 0, fmt.Errorf("peer credentials %q are not %q", s, format)
+	}
+	return uid, gid, pid, nil
+}
+
+// peerUIDIsAssignedUID: the UID the broker read from SO_PEERCRED equals the
+// UID the launcher assigned. peer-echo sends what it read back to the worker
+// as its reply, so the worker's "reply" line is the broker's report; a missing
+// or malformed reply is a violation, not a pass.
+func peerUIDIsAssignedUID(d PeerDial) []string {
+	l, ok := probeout.Find(probeout.Parse(d.Stdout), "reply")
+	if !ok || !l.OK {
+		return []string{fmt.Sprintf("%s: %s (uid %d) got no reply from the broker: %q", InvPeerUIDIsAssignedUID, d.Role, d.UID, d.Stdout)}
+	}
+	uid, _, _, err := parsePeerCred(l.Detail)
+	if err != nil {
+		return []string{fmt.Sprintf("%s: %s: %v", InvPeerUIDIsAssignedUID, d.Role, err)}
+	}
+	if uid != d.UID {
+		return []string{fmt.Sprintf("%s: %s: the broker read uid %d, the launcher assigned %d", InvPeerUIDIsAssignedUID, d.Role, uid, d.UID)}
+	}
+	return nil
+}
+
+// socketGroupGatesConnect: a worker without the socket group cannot connect.
+// Only a refusal for permission counts: a dial that fails for another reason
+// (the socket is missing, say) shows nothing about the group.
+func socketGroupGatesConnect(d PeerDial) []string {
+	l, ok := probeout.Find(probeout.Parse(d.Stdout), "dial")
+	switch {
+	case !ok:
+		return []string{fmt.Sprintf("%s: %s (uid %d) printed no dial line: %q", InvSocketGroupGatesConnect, d.Role, d.UID, d.Stdout)}
+	case l.OK:
+		return []string{fmt.Sprintf("%s: %s (uid %d) connected without the socket group", InvSocketGroupGatesConnect, d.Role, d.UID)}
+	case !strings.Contains(l.Detail, "permission denied"):
+		return []string{fmt.Sprintf("%s: %s (uid %d) was refused for another reason: %s", InvSocketGroupGatesConnect, d.Role, d.UID, l.Detail)}
+	}
+	return nil
+}
+
+// checkPeerIdentity runs the two peer-identity invariants over a set of dials:
+// peer-uid-is-assigned-uid for workers in the socket group,
+// socket-group-gates-connect for the others. A set too small to show anything
+// is a violation too: it needs two workers in the group with different UIDs
+// and one outside it.
+func checkPeerIdentity(dials []PeerDial) []string {
+	var bad []string
+	uids := map[int]bool{}
+	outsiders := 0
+	for _, d := range dials {
+		if d.InGroup {
+			uids[d.UID] = true
+			bad = append(bad, peerUIDIsAssignedUID(d)...)
+		} else {
+			outsiders++
+			bad = append(bad, socketGroupGatesConnect(d)...)
+		}
+	}
+	if len(uids) < 2 || outsiders == 0 {
+		bad = append(bad, fmt.Sprintf("peer identity: need two workers in the socket group with different UIDs and one outside it, got %d UIDs and %d outside", len(uids), outsiders))
+	}
+	return bad
 }
 
 // noLeak words the no-leak violations for objects still carrying a lesson

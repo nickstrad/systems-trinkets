@@ -123,8 +123,8 @@ H2 (2026-10-01, Linux amd64, Engine 29.7.2, containerd image store):
   instead of dropping them. Probe exit status: 0, or 1 when a line is
   DENIED (`battery` is a survey and exits 0), 2 for a usage error, 3 when it
   refuses. Commands that change the machine (`write`, `setuid`, `chown`,
-  `chmod`, `unlink`, `mount`, `unshare-user`, `keyctl`, `battery`, `alloc`,
-  `fork`, `initdir`) refuse unless `TRINKETS_PROBE=1` is set; every fixture
+  `chmod`, `unlink`, `replace` (added in H5), `mount`, `unshare-user`, `keyctl`,
+  `battery`, `alloc`, `fork`, `initdir`) refuse unless `TRINKETS_PROBE=1` is set; every fixture
   image bakes `ENV TRINKETS_PROBE=1`, so host-side tests can cover the pure
   helpers and usage paths but never run those actions on the host (they run
   in gated in-container tests, with `exec` of `/fixture <cmd>`: an exec does
@@ -296,3 +296,69 @@ H4 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
   routes from the VM, `OOMKilled` and exit 137 under its memory accounting,
   and `PIDMode: "container:<id>"` there.
 
+H5 (2026-10-01, Linux amd64, Engine 29.7.2, runc 1.4.3):
+
+- **API for lessons and H6.** `SocketVolume(ctx, cli, lesson, brokerUID,
+  socketGID) (broker, worker Mount, err)`: a labelled volume, prepared by a
+  one-shot init container running the probe's `initdir`; both mounts target
+  `SocketDir` (`/sock`), the worker one is `ReadOnly`. It builds the probe
+  image itself (`ProbePackage`, the signature has no image) and removes it
+  before returning. `BrokerSpec(lesson, image, brokerUID, socketGID, sock,
+  cmd...)` is `Restricted` as `brokerUID:socketGID` plus the mount;
+  `WorkerSpec(lesson, role, image, uid, gid, socketGID, sock, cmd...)` is
+  `Restricted` as `uid:gid`, `Groups: [socketGID]`, plus the mount.
+  `(*Container).WaitLine(ctx, name)` polls the logs for a probe line.
+  `VerifyPeerIdentity(ctx, cli, lesson, PeerIdentities) ([]PeerDial, error)`
+  runs peer-echo as broker at `PeerSocket`, dials from two workers and one
+  outsider, and returns an error naming the invariant when
+  `peer-uid-is-assigned-uid` or `socket-group-gates-connect` fails
+  (`DefaultPeerIdentities` are the spike's 20000/30000/20001/20002/20003).
+  The comparison is the pure `checkPeerIdentity`; a run with fewer than two
+  in-group UIDs or no outsider is itself a violation.
+- **The init step needs the socket group, not just CHOWN and FOWNER.** As
+  `0:0` with only those two capabilities, `initdir` left `/sock` at `0750`:
+  chmod clears the setgid bit when the caller is neither in the file's group
+  nor holds `CAP_FSETID`. Running the init container as `0:<socketGID>`
+  gives `drwxr-s---` with no extra capability. The plan's spike line
+  ("mode 2750" from a root init container) does not hold for `0:0`; it is
+  corrected.
+- **Bind needs the init step.** A fresh volume on an image without `/sock`
+  is root's, and the broker's `bind` fails with `permission denied`. With
+  the step, peer-echo (umask `007`) makes `srwxrwx--- uid=20000 gid=30000`.
+- **connect works on a read-only mount.** Workers dial through the
+  `ReadOnly` mount: connecting to a socket does not write the filesystem.
+  Through it, `unlink`, `replace` (bind beside, rename over), `chown` and
+  `chmod` fail with `read-only file system` before any permission check;
+  through a read-write mount of the same volume they still fail, with
+  `permission denied` (unlink, bind in the `2750` directory) and `operation
+  not permitted` (chown, chmod of the broker's socket). `setuid` to the
+  other worker's UID is `operation not permitted` either way.
+- **PID 0, shown both ways.** Workers 20001 and 20002 are reported as
+  `uid=N gid=N pid=0`; a dial exec'd inside the broker's own container got a
+  real PID (`pid=9` or `10` across runs). The supplementary socket group never appears; a
+  worker without it is refused at `connect` (`permission denied`) while the
+  same UID with it connects.
+- **peer-echo race (fixed).** peer-echo used to reply and close before
+  reading; a `dial` that writes then reads sometimes got `write: broken
+  pipe` and lost the reply. It now reads the request line (or EOF, 3 s cap)
+  before answering.
+- **The engine caps UIDs at 2^31-1.** `User` or `GroupAdd` above
+  `2147483647` passes create and fails at start: `uids and gids must be in
+  range 0-2147483647`, although the kernel allows up to `4294967294`.
+  `maxID` is now `2^31-1`, so `Translate` (User, Groups), `FixtureImage`
+  (User, owned dirs), `PeerIdentities` and `SocketVolume` all refuse a
+  larger ID before anything is created.
+- **Tests.** `TestProp_PeerUID` draws five distinct identities in
+  `1..2^31-1` and runs the whole verification; capped at 3 cases (about
+  12 s). Planting `s.User = RestrictedUser` in `WorkerSpec` made it fail on
+  the first case. `FuzzParsePeerCred` checks the reply parser against a
+  regexp oracle (accepted exactly when the text is what `%d` formatting
+  gives back); dropping the round-trip guard failed on the `uid=+1` seed.
+  Gated tests use `h5-` lesson labels and check that
+  `SocketVolume` and `VerifyPeerIdentity` leave no image behind.
+- Still unverified on Docker Desktop: everything above, in particular
+  `SO_PEERCRED` UIDs with Enhanced Container Isolation (which remaps
+  container UIDs and is the case `VerifyPeerIdentity` exists to catch), the
+  setgid behaviour of its file sharing for named volumes (they live in the
+  VM, so likely the same), and whether `connect` on a read-only mount works
+  there.

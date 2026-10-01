@@ -188,6 +188,9 @@ func TestSpec_H3_TranslateRejectsInvalidSpecs(t *testing.T) {
 		{"user name", "abc", with(func(s *Spec) { s.User = "root" }), "user"},
 		{"user gid name", "abc", with(func(s *Spec) { s.User = "1:wheel" }), "user"},
 		{"user out of range", "abc", with(func(s *Spec) { s.User = "4294967295" }), "user"},
+		{"user above the engine limit", "abc", with(func(s *Spec) { s.User = "2147483648" }), "user"},
+		{"gid above the engine limit", "abc", with(func(s *Spec) { s.User = "1:2147483648" }), "user"},
+		{"group above the engine limit", "abc", with(func(s *Spec) { s.Groups = []string{"2147483648"} }), "group"},
 		{"group name", "abc", with(func(s *Spec) { s.Groups = []string{"docker"} }), "group"},
 		{"bind type", "abc", with(func(s *Spec) { s.Mounts = []Mount{{Type: "bind", Source: "/etc", Target: "/etc"}} }), "type"},
 		{"empty type", "abc", with(func(s *Spec) { s.Mounts = []Mount{{Source: "v1", Target: "/v"}} }), "type"},
@@ -229,6 +232,19 @@ func TestSpec_H3_TranslateRejectsInvalidSpecs(t *testing.T) {
 				t.Errorf("a failed Translate returned a non-zero request: %+v", got)
 			}
 		})
+	}
+}
+
+// TestSpec_H3_TranslateAcceptsTheEngineMaxID: 2147483647 is the largest uid
+// and gid the engine starts a container with (one more is rejected above).
+func TestSpec_H3_TranslateAcceptsTheEngineMaxID(t *testing.T) {
+	s := Spec{Lesson: "les", Role: "r", Image: "i", User: "2147483647:2147483647", Groups: []string{"2147483647"}}
+	req, err := Translate(s, "", "abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.Config.User != "2147483647:2147483647" || !slices.Equal(req.HostConfig.GroupAdd, []string{"2147483647"}) {
+		t.Errorf("user %q, groups %v", req.Config.User, req.HostConfig.GroupAdd)
 	}
 }
 
@@ -477,9 +493,9 @@ func genSpecCase(t *rapid.T) specCase {
 	s.Cmd = rapid.SliceOfN(rapid.String(), 0, 3).Draw(t, "cmd")
 	s.Env = rapid.SliceOfN(rapid.String(), 0, 2).Draw(t, "env")
 	s.User = drawOr(t, &c, "user", 10,
-		rapid.SampledFrom([]string{"", "0", "0:0", "10001:10001", "20000:30000", "4294967294:1"}),
-		rapid.SampledFrom([]string{"root", "1:", ":1", "-1", "1:2:3", "4294967295", "1:x", " 1"}))
-	s.Groups = rapid.SliceOfN(drawGen(&c, "group", 10, rapid.SampledFrom([]string{"0", "30000", "4294967294"}), rapid.SampledFrom([]string{"wheel", "", "-1", "1 "})), 0, 2).Draw(t, "groups")
+		rapid.SampledFrom([]string{"", "0", "0:0", "10001:10001", "20000:30000", "2147483647:1"}),
+		rapid.SampledFrom([]string{"root", "1:", ":1", "-1", "1:2:3", "4294967295", "2147483648", "1:x", " 1"}))
+	s.Groups = rapid.SliceOfN(drawGen(&c, "group", 10, rapid.SampledFrom([]string{"0", "30000", "2147483647"}), rapid.SampledFrom([]string{"wheel", "", "-1", "1 ", "2147483648"})), 0, 2).Draw(t, "groups")
 	for i, n := 0, rapid.IntRange(0, 4).Draw(t, "mounts"); i < n; i++ {
 		s.Mounts = append(s.Mounts, genMount(t, &c))
 	}
