@@ -16,6 +16,7 @@
 #   make test             go test ./...: spec and property tests, fuzz seeds; no daemon
 #   make fuzz             run every Fuzz target for FUZZTIME (default 10s) each
 #   make check-docker     Docker harness tests that need a daemon (TRINKETS_DOCKER=1)
+#   make clean-harness    remove containers, volumes, networks and images labelled trinkets.harness=1
 #
 # Services: postgres, redis, valkey, seaweedfs, nats, etcd, registry, toxiproxy, temporal, openbao, pgbouncer (see software/software.md)
 
@@ -38,7 +39,7 @@ compose = docker compose -f $(compose_file_$(1))
 
 FUZZTIME     ?= 10s
 
-.PHONY: help ps check test fuzz check-docker
+.PHONY: help ps check test fuzz check-docker clean-harness
 
 help:
 	@sed -n 's/^#   /  /p' Makefile
@@ -101,6 +102,17 @@ fuzz:
 
 check-docker:
 	TRINKETS_DOCKER=1 go test -count=1 ./internal/lab/docker/...
+
+# Only objects the harness labelled (trinkets.harness=1) are touched, never
+# the compose services. Each step is a no-op when nothing matches, so a clean
+# daemon succeeds. Containers go first because they hold volumes and images.
+clean-harness:
+	@set -e; l=label=trinkets.harness=1; \
+	ids=$$(docker ps -aq --filter $$l); [ -z "$$ids" ] || docker rm -f $$ids >/dev/null; \
+	ids=$$(docker network ls -q --filter $$l); [ -z "$$ids" ] || docker network rm $$ids >/dev/null; \
+	ids=$$(docker volume ls -q --filter $$l); [ -z "$$ids" ] || docker volume rm -f $$ids >/dev/null; \
+	ids=$$(docker image ls -aq --filter $$l | sort -u); [ -z "$$ids" ] || docker rmi -f $$ids >/dev/null; \
+	echo "harness objects removed"
 
 ps:
 	@docker ps --filter "label=com.docker.compose.project" --format '{{.Label "com.docker.compose.project"}}\t{{.Status}}\t{{.Ports}}' | grep '^trinkets-' || echo "no trinkets services running"

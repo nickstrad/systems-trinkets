@@ -85,7 +85,14 @@ func removeSharedProbe(tag string) error {
 // handles), then sweeps the label as the net.
 func testLesson(t *testing.T, cli *client.Client, name string) string {
 	t.Helper()
-	lesson := "h3-" + name + "-" + randomName(t)
+	return sweptLesson(t, cli, "h3-"+name)
+}
+
+// sweptLesson is testLesson with the item prefix chosen by the caller (h3-,
+// h4-), so items sharing a daemon keep disjoint labels.
+func sweptLesson(t *testing.T, cli *client.Client, prefix string) string {
+	t.Helper()
+	lesson := prefix + "-" + randomName(t)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
